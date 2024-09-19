@@ -1,0 +1,31 @@
+<body>
+    <h1>BC1 Texture Compression Demo</h1>
+    <input type="file" id="image-upload" accept="image/*">
+    <button id="compress-btn">Compress All</button>
+    <div id="compression-container">
+        <div class="compression-method">
+            <h2>Original</h2>
+            <canvas id="original-canvas" class="result-canvas"></canvas>
+        </div>
+        <div class="compression-method">
+            <h2>PCA</h2>
+            <div id="pca-stats" class="stats"></div>
+            <canvas id="pca-canvas" class="result-canvas"></canvas>
+            <canvas id="pca-error-canvas" class="error-canvas"></canvas>
+        </div>
+        <div class="compression-method">
+            <h2>Basic</h2>
+            <div id="basic-stats" class="stats"></div>
+            <canvas id="basic-canvas" class="result-canvas"></canvas>
+            <canvas id="basic-error-canvas" class="error-canvas"></canvas>
+        </div>
+        <div class="compression-method">
+            <h2>Iterations</h2>
+            <input type="number" id="iterations" value="10" min="1" max="100">
+            <div id="random-stats" class="stats"></div>
+            <canvas id="random-canvas" class="result-canvas"></canvas>
+            <canvas id="random-error-canvas" class="error-canvas"></canvas>
+        </div>
+    </div>
+    <script type="module" src="js/main.js"></script>
+</body>
