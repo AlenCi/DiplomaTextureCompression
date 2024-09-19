@@ -28,7 +28,7 @@ fn color565ToVec3(color: u32) -> vec3<f32> {
     return vec3<f32>(
         f32((color >> 11u) & 31u) / 31.0,
         f32((color >> 5u) & 63u) / 63.0,
-        f32(color & 31u) / 31.0
+        f32(color & 31u) / 31.0,
     );
 }
 
