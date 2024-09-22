@@ -97,21 +97,17 @@ async function compressImageWebGPU(method, iterations) {
     );
 
     let uniformBuffer;
-    // TODO: make this better
     if (method === 'random') {
         uniformBuffer = device.createBuffer({
-            size: 32, 
+            size: 4, 
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
-        device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([
-            width, height, iterations, paddedWidth, paddedHeight
-        ]));
+        device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([iterations]));
     } else {
         uniformBuffer = device.createBuffer({
-            size: 16, 
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            size: 4,  // Dummy
+            usage: GPUBufferUsage.UNIFORM
         });
-        device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([width, height, paddedWidth, paddedHeight]));
     }
 
     const compressedSize = (paddedWidth / 4) * (paddedHeight / 4) * 8;
