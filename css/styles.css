@@ -20,8 +20,15 @@
 .stats {
     font-size: 14px;
     white-space: pre-wrap;
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-radius: 5px;
 }
 
+canvas {
+    max-width: 100%;
+    height: auto;
+}
 #iterations {
     width: 50px;
 }

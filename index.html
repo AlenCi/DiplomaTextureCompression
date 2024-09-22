@@ -1,31 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BC1 Texture Compression Demo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="css/styles.css" rel="stylesheet">
+</head>
 <body>
-    <h1>BC1 Texture Compression Demo</h1>
-    <input type="file" id="image-upload" accept="image/*">
-    <button id="compress-btn">Compress All</button>
-    <div id="compression-container">
-        <div class="compression-method">
-            <h2>Original</h2>
-            <canvas id="original-canvas" class="result-canvas"></canvas>
+    <div class="container mt-5">
+        <h1 class="mb-4">BC1 Texture Compression Demo</h1>
+        
+        <div class="mb-3">
+            <input type="file" id="image-upload" class="form-control" accept="image/*">
         </div>
-        <div class="compression-method">
-            <h2>PCA</h2>
-            <div id="pca-stats" class="stats"></div>
-            <canvas id="pca-canvas" class="result-canvas"></canvas>
-            <canvas id="pca-error-canvas" class="error-canvas"></canvas>
+        
+        <div class="mb-3">
+            <label for="iterations" class="form-label">Iterations:</label>
+            <input type="number" id="iterations" class="form-control" value="10" min="1" max="100">
         </div>
-        <div class="compression-method">
-            <h2>Basic</h2>
-            <div id="basic-stats" class="stats"></div>
-            <canvas id="basic-canvas" class="result-canvas"></canvas>
-            <canvas id="basic-error-canvas" class="error-canvas"></canvas>
-        </div>
-        <div class="compression-method">
-            <h2>Iterations</h2>
-            <input type="number" id="iterations" value="10" min="1" max="100">
-            <div id="random-stats" class="stats"></div>
-            <canvas id="random-canvas" class="result-canvas"></canvas>
-            <canvas id="random-error-canvas" class="error-canvas"></canvas>
+        
+        <button id="compress-btn" class="btn btn-primary mb-4">Compress All</button>
+        
+        <div id="compression-container" class="row">
+            <div class="col-md-6 mb-4">
+                <h2>Original</h2>
+                <canvas id="original-canvas" class="img-fluid"></canvas>
+            </div>
+            <div class="col-md-6 mb-4">
+                <h2>PCA</h2>
+                <canvas id="pca-canvas" class="img-fluid"></canvas>
+                <canvas id="pca-error-canvas" class="img-fluid mt-2"></canvas>
+                <pre id="pca-stats" class="stats mt-2"></pre>
+            </div>
+            <div class="col-md-6 mb-4">
+                <h2>Basic</h2>
+                <canvas id="basic-canvas" class="img-fluid"></canvas>
+                <canvas id="basic-error-canvas" class="img-fluid mt-2"></canvas>
+                <pre id="basic-stats" class="stats mt-2"></pre>
+            </div>
+            <div class="col-md-6 mb-4">
+                <h2>Random</h2>
+                <canvas id="random-canvas" class="img-fluid"></canvas>
+                <canvas id="random-error-canvas" class="img-fluid mt-2"></canvas>
+                <pre id="random-stats" class="stats mt-2"></pre>
+            </div>
         </div>
     </div>
-    <script type="module" src="js/main.js"></script>
+    
+    <script src="js/main.js"></script>
 </body>
+</html>

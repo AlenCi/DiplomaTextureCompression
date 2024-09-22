@@ -1,11 +1,3 @@
-struct Uniforms {
-    width: u32,
-    height: u32,
-    paddedWidth: u32,
-    paddedHeight: u32,
-};
-
-@group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var inputTexture: texture_2d<f32>;
 @group(0) @binding(2) var<storage, read_write> outputBuffer: array<u32>;
 fn colorTo565(color: vec3<f32>) -> u32 {
@@ -66,10 +58,15 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let dimensions = textureDimensions(inputTexture);
+    let width = dimensions.x;
+    let height = dimensions.y;
+    let paddedWidth = (width + 3u) & ~3u;
+    let paddedHeight = (height + 3u) & ~3u;
     let blockX = global_id.x;
     let blockY = global_id.y;
     
-    if (blockX >= uniforms.paddedWidth / 4u || blockY >= uniforms.paddedHeight / 4u) {
+    if (blockX >= paddedWidth / 4u || blockY >= paddedHeight / 4u) {
         return;
     }
     
@@ -81,7 +78,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             let pixelX = blockX * 4u + x;
             let pixelY = blockY * 4u + y;
             
-            if (pixelX < uniforms.width && pixelY < uniforms.height) {
+            if (pixelX < width && pixelY < height) {
                 pixels[y * 4u + x] = textureLoad(inputTexture, vec2<i32>(i32(pixelX), i32(pixelY)), 0);
             } else {
                 pixels[y * 4u + x] = vec4<f32>(0.0, 0.0, 0.0, 1.0);
@@ -90,7 +87,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
     
     let compressedBlock = compressBlock(pixels);
-    let outputIndex = (blockY * (uniforms.paddedWidth / 4u) + blockX) * 2u;
+    let outputIndex = (blockY * (paddedWidth / 4u) + blockX) * 2u;
     
     outputBuffer[outputIndex] = compressedBlock[0];
     outputBuffer[outputIndex + 1u] = compressedBlock[1];
