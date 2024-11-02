@@ -1,6 +1,6 @@
-// gpu-compression.js
+// gpu-setup.js
 
-export class GPUCompression {
+export class GPUSetup {
     constructor() {
         this.device = null;
         this.pipelines = null;
@@ -19,7 +19,7 @@ export class GPUCompression {
                 code: await fetch('shaders/bc1-compress-pca.wgsl').then(res => res.text())
             }),
             basic: await this.device.createShaderModule({
-                code: await fetch('shaders/bc1-compress-basic.wgsl').then(res => res.text()) 
+                code: await fetch('shaders/bc1-compress-basic.wgsl').then(res => res.text())
             }),
             random: await this.device.createShaderModule({
                 code: await fetch('shaders/bc1-compress-random.wgsl').then(res => res.text())
@@ -36,7 +36,7 @@ export class GPUCompression {
 
         this.pipelines = {
             pca: this.createPipeline(shaderModules.pca),
-            basic: this.createPipeline(shaderModules.basic), 
+            basic: this.createPipeline(shaderModules.basic),
             random: this.createPipeline(shaderModules.random)
         };
     }

@@ -1,51 +1,15 @@
 // main.js
 import { calculateMSE, calculatePSNR, getDecompressedColor, color565To888 } from './compression-utils.js';
+import { GPUSetup } from './gpu-setup.js';
 
-let device, pipelines, bindGroupLayout, originalImage;
+let gpuSetup, originalImage;
 
 async function init() {
-    const adapter = await navigator.gpu?.requestAdapter();
-    device = await adapter.requestDevice();
-
-    await setupWebGPUCompression();
+    gpuSetup = new GPUSetup();
+    await gpuSetup.init();
 
     document.getElementById('image-upload').addEventListener('change', handleFileUpload);
     document.getElementById('compress-btn').addEventListener('click', compressAllMethods);
-}
-
-async function setupWebGPUCompression() {
-    const shaderModules = {
-        pca: await device.createShaderModule({
-            code: await fetch('shaders/bc1-compress-pca.wgsl').then(res => res.text())
-        }),
-        basic: await device.createShaderModule({
-            code: await fetch('shaders/bc1-compress-basic.wgsl').then(res => res.text())
-        }),
-        random: await device.createShaderModule({
-            code: await fetch('shaders/bc1-compress-random.wgsl').then(res => res.text())
-        })
-    };
-
-    bindGroupLayout = device.createBindGroupLayout({
-        entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float' } },
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }
-        ]
-    });
-
-    pipelines = {
-        pca: createPipeline(shaderModules.pca),
-        basic: createPipeline(shaderModules.basic),
-        random: createPipeline(shaderModules.random)
-    };
-}
-
-function createPipeline(shaderModule) {
-    return device.createComputePipeline({
-        layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
-        compute: { module: shaderModule, entryPoint: 'main' }
-    });
 }
 
 async function compressAllMethods() {
@@ -77,6 +41,7 @@ function displayOriginalImage() {
 }
 
 async function compressImageWebGPU(method, iterations) {
+    const device = gpuSetup.getDevice();
     const { width, height } = originalImage;
     const paddedWidth = Math.ceil(width / 4) * 4;
     const paddedHeight = Math.ceil(height / 4) * 4;
@@ -120,7 +85,7 @@ async function compressImageWebGPU(method, iterations) {
     });
 
     const bindGroup = device.createBindGroup({
-        layout: bindGroupLayout,
+        layout: gpuSetup.getBindGroupLayout(),
         entries: [
             { binding: 0, resource: { buffer: uniformBuffer } },
             { binding: 1, resource: texture.createView() },
@@ -130,7 +95,7 @@ async function compressImageWebGPU(method, iterations) {
 
     const commandEncoder = device.createCommandEncoder();
     const computePass = commandEncoder.beginComputePass();
-    computePass.setPipeline(pipelines[method]);
+    computePass.setPipeline(gpuSetup.getPipeline(method));
     computePass.setBindGroup(0, bindGroup);
     computePass.dispatchWorkgroups(Math.ceil(width / 32), Math.ceil(height / 32));
     computePass.end();
