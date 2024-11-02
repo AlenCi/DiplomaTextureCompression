@@ -2,6 +2,7 @@
 import { calculateMSE, calculatePSNR, getDecompressedColor, color565To888 } from './compression-utils.js';
 import { GPUSetup } from './gpu-setup.js';
 import { displayOriginalImage, decompressAndVisualize, clearResults } from './visualization.js';
+import { FileHandler } from './file-handler.js';
 
 let gpuSetup, originalImage;
 
@@ -9,7 +10,12 @@ async function init() {
     gpuSetup = new GPUSetup();
     await gpuSetup.init();
 
-    document.getElementById('image-upload').addEventListener('change', handleFileUpload);
+    new FileHandler((image) => {
+        originalImage = image;
+        clearResults();
+        displayOriginalImage(originalImage);
+    });
+
     document.getElementById('compress-btn').addEventListener('click', compressAllMethods);
 }
 
@@ -110,22 +116,6 @@ async function compressImageWebGPU(method, iterations) {
 
     decompressAndVisualize(compressedData, width, height, paddedWidth, paddedHeight, `${method}-canvas`);
     gpuReadBuffer.unmap();
-}
-
-function handleFileUpload(event) {
-    const file = event.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            originalImage = new Image();
-            originalImage.onload = function() {
-                clearResults();
-                displayOriginalImage(originalImage);
-            }
-            originalImage.src = e.target.result;
-        }
-        reader.readAsDataURL(file);
-    }
 }
 
 init();
