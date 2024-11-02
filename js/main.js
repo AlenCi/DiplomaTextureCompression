@@ -1,9 +1,9 @@
 // main.js
-import { calculateMSE, calculatePSNR, getDecompressedColor, color565To888 } from './compression-utils.js';
 import { GPUSetup } from './gpu-setup.js';
-import { displayOriginalImage, decompressAndVisualize, clearResults } from './visualization.js';
+import { displayOriginalImage, clearResults } from './visualization.js';
 import { FileHandler } from './file-handler.js';
 import { createTexture, createUniformBuffer, setupCompression, executeCompression } from './gpu-helpers.js';
+import { displayCompressionResults } from './stats-display.js';
 
 let gpuSetup, originalImage;
 
@@ -40,6 +40,7 @@ async function compressImageWebGPU(method, iterations) {
     const { width, height } = originalImage;
     const paddedWidth = Math.ceil(width / 4) * 4;
     const paddedHeight = Math.ceil(height / 4) * 4;
+    const dimensions = { width, height, paddedWidth, paddedHeight };
 
     const texture = createTexture(device, width, height, paddedWidth, paddedHeight, originalImage);
     const uniformBuffer = createUniformBuffer(device, method, iterations);
@@ -63,17 +64,7 @@ async function compressImageWebGPU(method, iterations) {
         compressedSize
     );
 
-    const compressionRatio = (width * height * 4 / compressedSize).toFixed(2);
-    const mse = calculateMSE(originalImage, compressedData, width, height, paddedWidth, paddedHeight);
-    const psnr = calculatePSNR(mse);
-
-    document.getElementById(`${method}-stats`).textContent = `
-        Compression ratio: ${compressionRatio}:1
-        MSE: ${mse.toFixed(2)}
-        PSNR: ${psnr.toFixed(2)} dB
-    `;
-
-    decompressAndVisualize(compressedData, width, height, paddedWidth, paddedHeight, `${method}-canvas`);
+    displayCompressionResults(method, originalImage, compressedData, dimensions, compressedSize);
     gpuReadBuffer.unmap();
 }
 
