@@ -1,3 +1,4 @@
+/* Layout */
 #compression-container {
     display: flex;
     flex-wrap: wrap;
@@ -9,7 +10,9 @@
     margin-bottom: 20px;
 }
 
-.result-canvas, .error-canvas {
+/* Canvas and Results */
+.result-canvas, 
+.error-canvas {
     width: 100%;
     height: auto;
     max-height: 800px;
@@ -17,18 +20,81 @@
     margin-bottom: 10px;
 }
 
+canvas {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+}
+
+/* Stats Display */
 .stats {
     font-size: 14px;
     white-space: pre-wrap;
     background-color: #f8f9fa;
     padding: 10px;
     border-radius: 5px;
+    border: 1px solid #dee2e6;
+    font-family: monospace;
 }
 
-canvas {
-    max-width: 100%;
-    height: auto;
-}
+/* Controls */
 #iterations {
-    width: 50px;
+    width: 80px;
+}
+
+/* Loading Indicator */
+.loading-indicator {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 20px;
+    border-radius: 5px;
+    z-index: 1000;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .compression-method {
+        width: 100%;
+    }
+
+    #iterations {
+        width: 100%;
+    }
+}
+
+/* Error Display */
+.error-message {
+    color: #dc3545;
+    padding: 10px;
+    margin: 10px 0;
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+}
+
+/* Disable button styles */
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Canvas containers */
+.canvas-container {
+    position: relative;
+    margin-bottom: 1rem;
+}
+
+/* Additional Bootstrap Overrides */
+.form-control:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.btn-primary:focus {
+    box-shadow: 0 0 0 0.2rem rgba(38, 143, 255, 0.5);
 }

@@ -1,5 +1,6 @@
 let device, pipelines, bindGroupLayout, originalImage;
 
+
 async function init() {
     const adapter = await navigator.gpu?.requestAdapter();
     device = await adapter.requestDevice();
@@ -10,16 +11,42 @@ async function init() {
     document.getElementById('compress-btn').addEventListener('click', compressAllMethods);
 }
 
+
+async function getShaderCode(filename) {
+    if (typeof Deno !== 'undefined') {
+        // Get the current file's directory
+        const currentFile = new URL(import.meta.url).pathname;
+        // Remove '/js/main.js' to get base directory
+        const baseDir = currentFile.substring(0, currentFile.lastIndexOf('/js/'));
+        // Construct shader path
+        let shaderPath = `${baseDir}/shaders/${filename}`;
+        
+        // Fix Windows path issues
+        if (Deno.build.os === "windows") {
+            shaderPath = shaderPath.replace(/^\//, ''); // Remove leading slash
+            shaderPath = shaderPath.replace(/\//g, '\\'); // Convert to Windows path
+        }
+        
+        console.log('Trying to read shader from:', shaderPath); // Debug log
+        return await Deno.readTextFile(shaderPath);
+    } else {
+        // Browser version stays the same
+        return await fetch(filename).then(res => res.text());
+    }
+}
+
+
+
 async function setupWebGPUCompression() {
     const shaderModules = {
         pca: await device.createShaderModule({
-            code: await fetch('shaders/bc1-compress-pca.wgsl').then(res => res.text())
+            code: await getShaderCode('bc1-compress-pca.wgsl')
         }),
         basic: await device.createShaderModule({
-            code: await fetch('shaders/bc1-compress-basic.wgsl').then(res => res.text())
+            code: await getShaderCode('bc1-compress-basic.wgsl')
         }),
         random: await device.createShaderModule({
-            code: await fetch('shaders/bc1-compress-random.wgsl').then(res => res.text())
+            code: await getShaderCode('bc1-compress-random.wgsl')
         })
     };
 

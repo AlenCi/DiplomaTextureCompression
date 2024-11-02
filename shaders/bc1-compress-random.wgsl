@@ -33,10 +33,6 @@ fn calculateMSE(original: vec3<f32>, compressed: vec3<f32>) -> f32 {
     return dot(diff, diff);
 }
 
-fn calculateMAD(original: vec3<f32>, compressed: vec3<f32>) -> f32 {
-    return abs(original.r - compressed.r) + abs(original.g - compressed.g) + abs(original.b - compressed.b);
-}
-
 fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
     var bestColor0: u32 = 0u;
     var bestColor1: u32 = 0u;
