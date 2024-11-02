@@ -3,6 +3,7 @@ import { calculateMSE, calculatePSNR, getDecompressedColor, color565To888 } from
 import { GPUSetup } from './gpu-setup.js';
 import { displayOriginalImage, decompressAndVisualize, clearResults } from './visualization.js';
 import { FileHandler } from './file-handler.js';
+import { createTexture, createUniformBuffer } from './gpu-helpers.js';
 
 let gpuSetup, originalImage;
 
@@ -40,37 +41,8 @@ async function compressImageWebGPU(method, iterations) {
     const paddedWidth = Math.ceil(width / 4) * 4;
     const paddedHeight = Math.ceil(height / 4) * 4;
 
-    const texture = device.createTexture({
-        size: [paddedWidth, paddedHeight],
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
-    });
-
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = paddedWidth;
-    tempCanvas.height = paddedHeight;
-    const tempCtx = tempCanvas.getContext('2d');
-    tempCtx.drawImage(originalImage, 0, 0);
-
-    device.queue.copyExternalImageToTexture(
-        { source: tempCanvas },
-        { texture: texture },
-        [paddedWidth, paddedHeight]
-    );
-
-    let uniformBuffer;
-    if (method === 'random') {
-        uniformBuffer = device.createBuffer({
-            size: 4,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-        });
-        device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([iterations]));
-    } else {
-        uniformBuffer = device.createBuffer({
-            size: 4,
-            usage: GPUBufferUsage.UNIFORM
-        });
-    }
+    const texture = createTexture(device, width, height, paddedWidth, paddedHeight, originalImage);
+    const uniformBuffer = createUniformBuffer(device, method, iterations);
 
     const compressedSize = (paddedWidth / 4) * (paddedHeight / 4) * 8;
     const compressedBuffer = device.createBuffer({
