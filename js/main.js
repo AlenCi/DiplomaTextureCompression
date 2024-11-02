@@ -1,52 +1,40 @@
-let device, pipelines, bindGroupLayout, originalImage;
+import { GPUCompression } from './gpu-compression.js';
 
+let gpuCompression, originalImage;
 
 async function init() {
-    const adapter = await navigator.gpu?.requestAdapter();
-    device = await adapter.requestDevice();
-
-    await setupWebGPUCompression();
+    gpuCompression = new GPUCompression();
+    await gpuCompression.init();
 
     document.getElementById('image-upload').addEventListener('change', handleFileUpload);
     document.getElementById('compress-btn').addEventListener('click', compressAllMethods);
 }
 
+async function compressAllMethods() {
+    if (!originalImage) return;
 
-async function getShaderCode(filename) {
-    if (typeof Deno !== 'undefined') {
-        // Get the current file's directory
-        const currentFile = new URL(import.meta.url).pathname;
-        // Remove '/js/main.js' to get base directory
-        const baseDir = currentFile.substring(0, currentFile.lastIndexOf('/js/'));
-        // Construct shader path
-        let shaderPath = `${baseDir}/shaders/${filename}`;
-        
-        // Fix Windows path issues
-        if (Deno.build.os === "windows") {
-            shaderPath = shaderPath.replace(/^\//, ''); // Remove leading slash
-            shaderPath = shaderPath.replace(/\//g, '\\'); // Convert to Windows path
-        }
-        
-        console.log('Trying to read shader from:', shaderPath); // Debug log
-        return await Deno.readTextFile(shaderPath);
-    } else {
-        // Browser version stays the same
-        return await fetch(filename).then(res => res.text());
+    clearResults();
+
+    const methods = ['pca', 'basic', 'random'];
+    const iterations = parseInt(document.getElementById('iterations').value);
+
+    displayOriginalImage();
+
+    for (const method of methods) {
+        await compressImageWebGPU(method, iterations);
     }
 }
-
-
 
 async function setupWebGPUCompression() {
     const shaderModules = {
         pca: await device.createShaderModule({
-            code: await getShaderCode('bc1-compress-pca.wgsl')
+            code: await fetch('shaders/bc1-compress-pca.wgsl').then(res => res.text())
         }),
         basic: await device.createShaderModule({
-            code: await getShaderCode('bc1-compress-basic.wgsl')
+            code: await fetch('shaders/bc1-compress-basic.wgsl').then(res => res.text())
         }),
         random: await device.createShaderModule({
-            code: await getShaderCode('bc1-compress-random.wgsl')
+            code: await fetch('shaders/bc1-compress-random.wgsl').then(res => res.text())
         })
     };
 
@@ -72,20 +60,7 @@ function createPipeline(shaderModule) {
     });
 }
 
-async function compressAllMethods() {
-    if (!originalImage) return;
 
-    clearResults(); 
-
-    const methods = ['pca', 'basic', 'random'];
-    const iterations = parseInt(document.getElementById('iterations').value);
-
-    displayOriginalImage();
-
-    for (const method of methods) {
-        await compressImageWebGPU(method, iterations);
-    }
-}
 
 function displayOriginalImage() {
     const canvas = document.getElementById('original-canvas');
@@ -101,6 +76,7 @@ function displayOriginalImage() {
 }
 
 async function compressImageWebGPU(method, iterations) {
+    const device = gpuCompression.getDevice();
     const { width, height } = originalImage;
     const paddedWidth = Math.ceil(width / 4) * 4;
     const paddedHeight = Math.ceil(height / 4) * 4;
@@ -110,6 +86,7 @@ async function compressImageWebGPU(method, iterations) {
         format: 'rgba8unorm',
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
     });
+
 
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = paddedWidth;
@@ -144,7 +121,7 @@ async function compressImageWebGPU(method, iterations) {
     });
 
     const bindGroup = device.createBindGroup({
-        layout: bindGroupLayout,
+        layout: gpuCompression.getBindGroupLayout(),
         entries: [
             { binding: 0, resource: { buffer: uniformBuffer } },
             { binding: 1, resource: texture.createView() },
@@ -154,7 +131,7 @@ async function compressImageWebGPU(method, iterations) {
 
     const commandEncoder = device.createCommandEncoder();
     const computePass = commandEncoder.beginComputePass();
-    computePass.setPipeline(pipelines[method]);
+    computePass.setPipeline(gpuCompression.getPipeline(method));
     computePass.setBindGroup(0, bindGroup);
     computePass.dispatchWorkgroups(Math.ceil(width / 32), Math.ceil(height / 32));
     computePass.end();
