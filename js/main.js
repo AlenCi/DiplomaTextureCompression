@@ -1,28 +1,16 @@
-import { GPUCompression } from './gpu-compression.js';
+// main.js
+import { calculateMSE, calculatePSNR, getDecompressedColor, color565To888 } from './compression-utils.js';
 
-let gpuCompression, originalImage;
+let device, pipelines, bindGroupLayout, originalImage;
 
 async function init() {
-    gpuCompression = new GPUCompression();
-    await gpuCompression.init();
+    const adapter = await navigator.gpu?.requestAdapter();
+    device = await adapter.requestDevice();
+
+    await setupWebGPUCompression();
 
     document.getElementById('image-upload').addEventListener('change', handleFileUpload);
     document.getElementById('compress-btn').addEventListener('click', compressAllMethods);
-}
-
-async function compressAllMethods() {
-    if (!originalImage) return;
-
-    clearResults();
-
-    const methods = ['pca', 'basic', 'random'];
-    const iterations = parseInt(document.getElementById('iterations').value);
-
-    displayOriginalImage();
-
-    for (const method of methods) {
-        await compressImageWebGPU(method, iterations);
-    }
 }
 
 async function setupWebGPUCompression() {
@@ -60,13 +48,26 @@ function createPipeline(shaderModule) {
     });
 }
 
+async function compressAllMethods() {
+    if (!originalImage) return;
 
+    clearResults();
+
+    const methods = ['pca', 'basic', 'random'];
+    const iterations = parseInt(document.getElementById('iterations').value);
+
+    displayOriginalImage();
+
+    for (const method of methods) {
+        await compressImageWebGPU(method, iterations);
+    }
+}
 
 function displayOriginalImage() {
     const canvas = document.getElementById('original-canvas');
     const ctx = canvas.getContext('2d');
     
-    const maxDimension = 800; 
+    const maxDimension = 800;
     const scale = Math.min(1, maxDimension / Math.max(originalImage.width, originalImage.height));
     
     canvas.width = originalImage.width * scale;
@@ -76,7 +77,6 @@ function displayOriginalImage() {
 }
 
 async function compressImageWebGPU(method, iterations) {
-    const device = gpuCompression.getDevice();
     const { width, height } = originalImage;
     const paddedWidth = Math.ceil(width / 4) * 4;
     const paddedHeight = Math.ceil(height / 4) * 4;
@@ -86,7 +86,6 @@ async function compressImageWebGPU(method, iterations) {
         format: 'rgba8unorm',
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
     });
-
 
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = paddedWidth;
@@ -103,13 +102,13 @@ async function compressImageWebGPU(method, iterations) {
     let uniformBuffer;
     if (method === 'random') {
         uniformBuffer = device.createBuffer({
-            size: 4, 
+            size: 4,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
         device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([iterations]));
     } else {
         uniformBuffer = device.createBuffer({
-            size: 4,  // Dummy
+            size: 4,
             usage: GPUBufferUsage.UNIFORM
         });
     }
@@ -121,7 +120,7 @@ async function compressImageWebGPU(method, iterations) {
     });
 
     const bindGroup = device.createBindGroup({
-        layout: gpuCompression.getBindGroupLayout(),
+        layout: bindGroupLayout,
         entries: [
             { binding: 0, resource: { buffer: uniformBuffer } },
             { binding: 1, resource: texture.createView() },
@@ -131,7 +130,7 @@ async function compressImageWebGPU(method, iterations) {
 
     const commandEncoder = device.createCommandEncoder();
     const computePass = commandEncoder.beginComputePass();
-    computePass.setPipeline(gpuCompression.getPipeline(method));
+    computePass.setPipeline(pipelines[method]);
     computePass.setBindGroup(0, bindGroup);
     computePass.dispatchWorkgroups(Math.ceil(width / 32), Math.ceil(height / 32));
     computePass.end();
@@ -147,7 +146,7 @@ async function compressImageWebGPU(method, iterations) {
     const compressedData = new Uint32Array(gpuReadBuffer.getMappedRange());
 
     const compressionRatio = (width * height * 4 / compressedSize).toFixed(2);
-    const mse = calculateMSE(originalImage, compressedData, width, height,paddedWidth,paddedHeight);
+    const mse = calculateMSE(originalImage, compressedData, width, height, paddedWidth, paddedHeight);
     const psnr = calculatePSNR(mse);
 
     document.getElementById(`${method}-stats`).textContent = `
@@ -157,73 +156,14 @@ async function compressImageWebGPU(method, iterations) {
     `;
 
     decompressAndVisualize(compressedData, width, height, paddedWidth, paddedHeight, `${method}-canvas`);
-    visualizeError(originalImage, compressedData, width, height, paddedWidth, paddedHeight, `${method}-error-canvas`);
     gpuReadBuffer.unmap();
-}
-
-function calculateMSE(original, compressed, width, height, paddedWidth, paddedHeight) {
-    const canvas = document.createElement('canvas');
-    canvas.width = paddedWidth;
-    canvas.height = paddedHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(original, 0, 0);
-    const originalData = ctx.getImageData(0, 0, paddedWidth, paddedHeight).data;
-    
-    let mse = 0;
-    for (let y = 0; y < paddedHeight; y++) {
-        for (let x = 0; x < paddedWidth; x++) {
-            const i = (y * paddedWidth + x) * 4;
-            const blockIndex = (Math.floor(y / 4) * (paddedWidth / 4) + Math.floor(x / 4)) * 2;
-            const pixelIndex = (y % 4) * 4 + (x % 4);
-            const color0 = compressed[blockIndex] & 0xFFFF;
-            const color1 = compressed[blockIndex] >> 16;
-            const lookupTable = compressed[blockIndex + 1];
-            const colorIndex = (lookupTable >> (pixelIndex * 2)) & 0x3;
-            
-            const decompressedColor = getDecompressedColor(color0, color1, colorIndex);
-            
-            for (let j = 0; j < 3; j++) {
-                const diff = originalData[i + j] - decompressedColor[j];
-                mse += diff * diff;
-            }
-        }
-    }
-    
-    return mse / (paddedWidth * paddedHeight * 3);
-}
-
-function calculatePSNR(mse) {
-    return 10 * Math.log10(255 * 255 / mse);
-}
-
-function getDecompressedColor(color0, color1, colorIndex) {
-    const c0 = color565To888(color0);
-    const c1 = color565To888(color1);
-    
-    switch (colorIndex) {
-        case 0: return c0;
-        case 1: return c1;
-        case 2: return c0.map((v, i) => Math.round((2 * v + c1[i]) / 3));
-        case 3: return c0.map((v, i) => Math.round((v + 2 * c1[i]) / 3));
-    }
-}
-
-function color565To888(color) {
-    const r = (color >> 11) & 0x1F;
-    const g = (color >> 5) & 0x3F;
-    const b = color & 0x1F;
-    return [
-        (r << 3) | (r >> 2),
-        (g << 2) | (g >> 4),
-        (b << 3) | (b >> 2)
-    ];
 }
 
 function decompressAndVisualize(compressedData, width, height, paddedWidth, paddedHeight, canvasId) {
     const canvas = document.getElementById(canvasId);
     const ctx = canvas.getContext('2d');
     
-    const maxDimension = 1200; 
+    const maxDimension = 1200;
     const scale = Math.min(1, maxDimension / Math.max(width, height));
     
     canvas.width = width * scale;
@@ -282,10 +222,6 @@ function clearResults() {
     });
 }
 
-function visualizeError(original, compressed, width, height, paddedWidth, paddedHeight, canvasId) {
-    // TODO
-}
-
 function handleFileUpload(event) {
     const file = event.target.files[0];
     if (file) {
@@ -301,4 +237,5 @@ function handleFileUpload(event) {
         reader.readAsDataURL(file);
     }
 }
+
 init();
