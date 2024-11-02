@@ -3,7 +3,7 @@ import { calculateMSE, calculatePSNR, getDecompressedColor, color565To888 } from
 import { GPUSetup } from './gpu-setup.js';
 import { displayOriginalImage, decompressAndVisualize, clearResults } from './visualization.js';
 import { FileHandler } from './file-handler.js';
-import { createTexture, createUniformBuffer } from './gpu-helpers.js';
+import { createTexture, createUniformBuffer, setupCompression, executeCompression } from './gpu-helpers.js';
 
 let gpuSetup, originalImage;
 
@@ -43,38 +43,25 @@ async function compressImageWebGPU(method, iterations) {
 
     const texture = createTexture(device, width, height, paddedWidth, paddedHeight, originalImage);
     const uniformBuffer = createUniformBuffer(device, method, iterations);
+    
+    const { compressedBuffer, bindGroup, compressedSize } = setupCompression(
+        device,
+        gpuSetup.getBindGroupLayout(),
+        paddedWidth,
+        paddedHeight,
+        texture,
+        uniformBuffer
+    );
 
-    const compressedSize = (paddedWidth / 4) * (paddedHeight / 4) * 8;
-    const compressedBuffer = device.createBuffer({
-        size: compressedSize,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-    });
-
-    const bindGroup = device.createBindGroup({
-        layout: gpuSetup.getBindGroupLayout(),
-        entries: [
-            { binding: 0, resource: { buffer: uniformBuffer } },
-            { binding: 1, resource: texture.createView() },
-            { binding: 2, resource: { buffer: compressedBuffer } }
-        ]
-    });
-
-    const commandEncoder = device.createCommandEncoder();
-    const computePass = commandEncoder.beginComputePass();
-    computePass.setPipeline(gpuSetup.getPipeline(method));
-    computePass.setBindGroup(0, bindGroup);
-    computePass.dispatchWorkgroups(Math.ceil(width / 32), Math.ceil(height / 32));
-    computePass.end();
-
-    const gpuReadBuffer = device.createBuffer({
-        size: compressedSize,
-        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-    });
-    commandEncoder.copyBufferToBuffer(compressedBuffer, 0, gpuReadBuffer, 0, compressedSize);
-    device.queue.submit([commandEncoder.finish()]);
-
-    await gpuReadBuffer.mapAsync(GPUMapMode.READ);
-    const compressedData = new Uint32Array(gpuReadBuffer.getMappedRange());
+    const { compressedData, gpuReadBuffer } = await executeCompression(
+        device,
+        gpuSetup.getPipeline(method),
+        bindGroup,
+        compressedBuffer,
+        width,
+        height,
+        compressedSize
+    );
 
     const compressionRatio = (width * height * 4 / compressedSize).toFixed(2);
     const mse = calculateMSE(originalImage, compressedData, width, height, paddedWidth, paddedHeight);
