@@ -1,6 +1,6 @@
 // compression-utils.js
 
-export function calculateMSE(original, compressed, width, height, paddedWidth, paddedHeight) {
+export function calculateMSE(original, compressed, paddedWidth, paddedHeight) {
     const canvas = document.createElement('canvas');
     canvas.width = paddedWidth;
     canvas.height = paddedHeight;

@@ -1,51 +1,25 @@
-// gpu-setup.js
+// web/gpu-setup.js
+import { CompressionCore } from '../shared/compression-core.js';
 
 export class GPUSetup {
     constructor() {
         this.device = null;
-        this.pipelines = null;
-        this.bindGroupLayout = null;
+        this.compressionCore = null;
     }
 
     async init() {
         const adapter = await navigator.gpu?.requestAdapter();
         this.device = await adapter.requestDevice();
-        await this.setupCompression();
-    }
-
-    async setupCompression() {
-        const shaderModules = {
-            pca: await this.device.createShaderModule({
-                code: await fetch('shaders/bc1-compress-pca.wgsl').then(res => res.text())
-            }),
-            basic: await this.device.createShaderModule({
-                code: await fetch('shaders/bc1-compress-basic.wgsl').then(res => res.text())
-            }),
-            random: await this.device.createShaderModule({
-                code: await fetch('shaders/bc1-compress-random.wgsl').then(res => res.text())
-            })
+        
+        // Load shaders in web-specific way
+        const shaderSources = {
+            pca: await fetch('../shared/shaders/bc1-compress-pca.wgsl').then(res => res.text()),
+            basic: await fetch('../shared/shaders/bc1-compress-basic.wgsl').then(res => res.text()),
+            random: await fetch('../shared/shaders/bc1-compress-random.wgsl').then(res => res.text())
         };
 
-        this.bindGroupLayout = this.device.createBindGroupLayout({
-            entries: [
-                { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-                { binding: 1, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float' } },
-                { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }
-            ]
-        });
-
-        this.pipelines = {
-            pca: this.createPipeline(shaderModules.pca),
-            basic: this.createPipeline(shaderModules.basic),
-            random: this.createPipeline(shaderModules.random)
-        };
-    }
-
-    createPipeline(shaderModule) {
-        return this.device.createComputePipeline({
-            layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.bindGroupLayout] }),
-            compute: { module: shaderModule, entryPoint: 'main' }
-        });
+        this.compressionCore = new CompressionCore(this.device);
+        await this.compressionCore.init(shaderSources);
     }
 
     getDevice() {
@@ -53,10 +27,10 @@ export class GPUSetup {
     }
 
     getPipeline(method) {
-        return this.pipelines[method];
+        return this.compressionCore.getPipeline(method);
     }
 
     getBindGroupLayout() {
-        return this.bindGroupLayout;
+        return this.compressionCore.getBindGroupLayout();
     }
 }

@@ -1,3 +1,5 @@
+// shared/shaders/bc1-compress-random.wgsl
+
 struct Uniforms {
     iterations: u32,
 };
@@ -6,7 +8,6 @@ struct Uniforms {
 @group(0) @binding(1) var inputTexture: texture_2d<f32>;
 @group(0) @binding(2) var<storage, read_write> outputBuffer: array<u32>;
 
-// Random number generator
 var<private> seed: u32;
 
 fn rand() -> f32 {
@@ -17,7 +18,7 @@ fn rand() -> f32 {
 }
 
 fn colorTo565(color: vec3<f32>) -> u32 {
-    return (u32(color.r * 31.0) << 11u) | (u32(color.g * 63.0) << 5u) | u32(color.b * 31.0);
+    return (u32(color.x * 31.0) << 11u) | (u32(color.y * 63.0) << 5u) | u32(color.z * 31.0);
 }
 
 fn color565ToVec3(color: u32) -> vec3<f32> {
@@ -26,6 +27,30 @@ fn color565ToVec3(color: u32) -> vec3<f32> {
         f32((color >> 5u) & 63u) / 63.0,
         f32(color & 31u) / 31.0,
     );
+}
+
+fn getPixelComponents(pixels: array<vec4<f32>, 16>, index: u32) -> vec4<f32> {
+    var result: vec4<f32>;
+    switch(index) {
+        case 0u: { result = pixels[0]; }
+        case 1u: { result = pixels[1]; }
+        case 2u: { result = pixels[2]; }
+        case 3u: { result = pixels[3]; }
+        case 4u: { result = pixels[4]; }
+        case 5u: { result = pixels[5]; }
+        case 6u: { result = pixels[6]; }
+        case 7u: { result = pixels[7]; }
+        case 8u: { result = pixels[8]; }
+        case 9u: { result = pixels[9]; }
+        case 10u: { result = pixels[10]; }
+        case 11u: { result = pixels[11]; }
+        case 12u: { result = pixels[12]; }
+        case 13u: { result = pixels[13]; }
+        case 14u: { result = pixels[14]; }
+        case 15u: { result = pixels[15]; }
+        default: { result = vec4<f32>(0.0); }
+    }
+    return result;
 }
 
 fn calculateMSE(original: vec3<f32>, compressed: vec3<f32>) -> f32 {
@@ -50,9 +75,19 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         var error = 0.0;
         for (var j = 0u; j < 16u; j++) {
             var bestPixelError = 1000000.0;
+            let pixel = getPixelComponents(pixels, j);
+            let rgb = vec3<f32>(pixel.x, pixel.y, pixel.z);
+            
             for (var k = 0u; k < 4u; k++) {
-                let compressedColor = select(color0, select(color1, select(color2, color3, k == 3u), k == 2u), k == 1u);
-                let pixelError = calculateMSE(pixels[j].rgb, compressedColor);
+                var compressedColor: vec3<f32>;
+                switch(k) {
+                    case 0u: { compressedColor = color0; }
+                    case 1u: { compressedColor = color1; }
+                    case 2u: { compressedColor = color2; }
+                    case 3u: { compressedColor = color3; }
+                    default: { compressedColor = color0; }
+                }
+                let pixelError = calculateMSE(rgb, compressedColor);
                 bestPixelError = min(bestPixelError, pixelError);
             }
             error += bestPixelError;
@@ -66,19 +101,25 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
     }
 
     var lookupTable: u32 = 0u;
-    let colors = array<vec3<f32>, 4>(
-        color565ToVec3(bestColor0),
-        color565ToVec3(bestColor1),
-        mix(color565ToVec3(bestColor0), color565ToVec3(bestColor1), 1.0 / 3.0),
-        mix(color565ToVec3(bestColor0), color565ToVec3(bestColor1), 2.0 / 3.0)
-    );
+    let c0 = color565ToVec3(bestColor0);
+    let c1 = color565ToVec3(bestColor1);
 
     for (var i = 0u; i < 16u; i++) {
         var bestIndex = 0u;
         var bestDistance = 1000000.0;
+        let pixel = getPixelComponents(pixels, i);
+        let rgb = vec3<f32>(pixel.x, pixel.y, pixel.z);
         
         for (var j = 0u; j < 4u; j++) {
-            let distance = calculateMSE(pixels[i].rgb, colors[j]);
+            var paletteColor: vec3<f32>;
+            switch(j) {
+                case 0u: { paletteColor = c0; }
+                case 1u: { paletteColor = c1; }
+                case 2u: { paletteColor = mix(c0, c1, 1.0 / 3.0); }
+                case 3u: { paletteColor = mix(c0, c1, 2.0 / 3.0); }
+                default: { paletteColor = c0; }
+            }
+            let distance = calculateMSE(rgb, paletteColor);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 bestIndex = j;
@@ -108,7 +149,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
     
-    
     seed = blockX + blockY * 1000u + global_id.z * 1000000u;
     
     var pixels: array<vec4<f32>, 16>;
@@ -117,11 +157,12 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         for (var x = 0u; x < 4u; x++) {
             let pixelX = blockX * 4u + x;
             let pixelY = blockY * 4u + y;
+            let pixel_index = y * 4u + x;
             
             if (pixelX < width && pixelY < height) {
-                pixels[y * 4u + x] = textureLoad(inputTexture, vec2<i32>(i32(pixelX), i32(pixelY)), 0);
+                pixels[pixel_index] = textureLoad(inputTexture, vec2<i32>(i32(pixelX), i32(pixelY)), 0);
             } else {
-                pixels[y * 4u + x] = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+                pixels[pixel_index] = vec4<f32>(0.0, 0.0, 0.0, 1.0);
             }
         }
     }

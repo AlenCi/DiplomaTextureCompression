@@ -42,7 +42,7 @@ async function compressImageWebGPU(method, iterations) {
     const paddedHeight = Math.ceil(height / 4) * 4;
     const dimensions = { width, height, paddedWidth, paddedHeight };
 
-    const texture = createTexture(device, width, height, paddedWidth, paddedHeight, originalImage);
+    const texture = createTexture(device, paddedWidth, paddedHeight, originalImage);
     const uniformBuffer = createUniformBuffer(device, method, iterations);
     
     const { compressedBuffer, bindGroup, compressedSize } = setupCompression(

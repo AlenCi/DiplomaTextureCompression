@@ -12,7 +12,7 @@ export function displayCompressionResults(
     const { width, height, paddedWidth, paddedHeight } = dimensions;
     
     const compressionRatio = (width * height * 4 / compressedSize).toFixed(2);
-    const mse = calculateMSE(originalImage, compressedData, width, height, paddedWidth, paddedHeight);
+    const mse = calculateMSE(originalImage, compressedData, paddedWidth, paddedHeight);
     const psnr = calculatePSNR(mse);
 
     document.getElementById(`${method}-stats`).textContent = `
