@@ -1,6 +1,9 @@
 // cli/main.js
 import { CompressionCore } from '../shared/compression-core.js';
+import { CompressionHandler } from '../shared/compression-handler.js';
+import { DDSHandler } from '../shared/dds-handler.js';
 import { dirname, fromFileUrl, join } from "https://deno.land/std/path/mod.ts";
+import { DecompressionHandler } from '../shared/decompression-handler.js';
 
 async function loadShaders() {
     const currentDir = dirname(fromFileUrl(import.meta.url));
@@ -50,15 +53,73 @@ async function saveDDS(compressedData, width, height, outputPath) {
 }
 
 async function compress(inputPath, outputPath, method = 'pca', iterations = 1000) {
-    console.log(`Compressing ${inputPath} to ${outputPath} using ${method} method...`);
-    
-    // TODO: Implement compression
+    try {
+        console.log(`Compressing ${inputPath} to ${outputPath} using ${method} method...`);
+        
+        const adapter = await navigator.gpu?.requestAdapter();
+        if (!adapter) {
+            throw new Error("WebGPU not supported");
+        }
+        
+        const device = await adapter.requestDevice();
+        console.log("WebGPU initialized successfully");
+
+        const shaderSources = await loadShaders();
+        console.log("Shaders loaded successfully");
+        
+        const compressionCore = new CompressionCore(device);
+        await compressionCore.init(shaderSources);
+        console.log("Compression core initialized");
+        
+        const handler = new CompressionHandler(device, compressionCore);
+        console.log("Compression handler created");
+        
+        console.log("Starting image compression...");
+        const result = await handler.compressImage(inputPath, method, iterations);
+        
+        console.log("Compression complete, saving to DDS...");
+        await DDSHandler.writeDDS(outputPath, result.width, result.height, result.compressedData);
+        
+        console.log("Operation complete!");
+        
+    } catch (error) {
+        console.error("Compression failed with error:", error);
+        console.error("Error stack:", error.stack);
+        throw error;
+    }
 }
 
+
 async function decompress(inputPath, outputPath) {
-    console.log(`Decompressing ${inputPath} to ${outputPath}...`);
-    
-    // TODO: Implement decompression
+    try {
+        console.log(`Decompressing ${inputPath} to ${outputPath}...`);
+        
+        // Read DDS file
+        const ddsData = await DDSHandler.readDDS(inputPath);
+        console.log(`Loaded DDS file: ${ddsData.width}x${ddsData.height}`);
+
+        // Decompress to RGBA
+        console.log('Decompressing data...');
+        const pixels = DecompressionHandler.decompress(
+            ddsData.compressedData,
+            ddsData.width,
+            ddsData.height
+        );
+
+        // Save as PNG
+        console.log('Saving decompressed image...');
+        await DecompressionHandler.saveImage(
+            pixels,
+            ddsData.width,
+            ddsData.height,
+            outputPath
+        );
+
+        console.log('Decompression complete!');
+    } catch (error) {
+        console.error("Decompression failed:", error);
+        throw error;
+    }
 }
 
 async function main() {
