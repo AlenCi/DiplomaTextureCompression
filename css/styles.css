@@ -98,3 +98,31 @@ button:disabled {
 .btn-primary:focus {
     box-shadow: 0 0 0 0.2rem rgba(38, 143, 255, 0.5);
 }
+
+.download-btn {
+    display: block;
+    margin-top: 10px;
+    padding: 5px 10px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.download-btn:hover {
+    background-color: #45a049;
+}
+
+#dds-decompressed {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+.compression-method {
+    margin-bottom: 20px;
+}

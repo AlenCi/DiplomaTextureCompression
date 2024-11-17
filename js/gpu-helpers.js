@@ -76,10 +76,12 @@ export async function executeCompression(device, pipeline, bindGroup, compressed
     await gpuReadBuffer.mapAsync(GPUMapMode.READ);
     const compressedData = new Uint32Array(gpuReadBuffer.getMappedRange());
     
-    const result = {
-        compressedData,
+    // Create a copy of the data before unmapping
+    const compressedDataCopy = new Uint32Array(compressedData.length);
+    compressedDataCopy.set(compressedData);
+
+    return {
+        compressedData: compressedDataCopy,
         gpuReadBuffer
     };
-    
-    return result;
 }
