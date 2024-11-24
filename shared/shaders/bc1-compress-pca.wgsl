@@ -4,7 +4,10 @@
 @group(0) @binding(2) var<storage, read_write> outputBuffer: array<u32>;
 
 fn colorTo565(color: vec3<f32>) -> u32 {
-    return (u32(color.x * 31.0) << 11u) | (u32(color.y * 63.0) << 5u) | u32(color.z * 31.0);
+    let r = u32(clamp(color.x * 31.0, 0.0, 31.0));
+    let g = u32(clamp(color.y * 63.0, 0.0, 63.0));
+    let b = u32(clamp(color.z * 31.0, 0.0, 31.0));
+    return (r << 11u) | (g << 5u) | b;
 }
 
 fn colorDistance(c1: vec3<f32>, c2: vec3<f32>) -> f32 {
@@ -46,47 +49,189 @@ fn getColor(index: u32, c0: vec3<f32>, c1: vec3<f32>) -> vec3<f32> {
     }
 }
 
-fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
-    let pixel0 = getPixelComponents(pixels, 0u);
-    var minColor = vec3<f32>(pixel0.x, pixel0.y, pixel0.z);
-    var maxColor = minColor;
-
-    for (var i = 1u; i < 16u; i++) {
+fn calculateMean(pixels: array<vec4<f32>, 16>) -> vec3<f32> {
+    var sum = vec3<f32>(0.0);
+    var count = 0.0;
+    var min_color = vec3<f32>(1.0);
+    var max_color = vec3<f32>(0.0);
+    
+    for (var i = 0u; i < 16u; i++) {
         let pixel = getPixelComponents(pixels, i);
-        let rgb = vec3<f32>(pixel.x, pixel.y, pixel.z);
-        let alpha = pixel.w;
-        
-        if (alpha < 0.5 || all(rgb == vec3<f32>(0.0))) { 
-            continue; 
+        if (pixel.w >= 0.5) {
+            sum += pixel.rgb;
+            count += 1.0;
+            min_color = min(min_color, pixel.rgb);
+            max_color = max(max_color, pixel.rgb);
         }
+    }
+    
+    // If not enough variation or too few pixels, use center of bounds
+    let color_range = length(max_color - min_color);
+    if (count <= 1.0 || color_range < 0.001) {
+        return (max_color + min_color) * 0.5;
+    }
+    
+    return sum / count;
+}
 
-        if (colorDistance(rgb, minColor) > colorDistance(maxColor, minColor)) {
-            maxColor = rgb;
-        } else if (colorDistance(rgb, maxColor) > colorDistance(minColor, maxColor)) {
-            minColor = rgb;
+fn calculateCovariance(pixels: array<vec4<f32>, 16>, mean: vec3<f32>) -> mat3x3<f32> {
+    var cov = mat3x3<f32>(
+        vec3<f32>(0.0), 
+        vec3<f32>(0.0), 
+        vec3<f32>(0.0)
+    );
+    var count = 0.0;
+
+    for (var i = 0u; i < 16u; i++) {
+        let pixel = getPixelComponents(pixels, i);
+        if (pixel.w >= 0.5) {
+            let diff = pixel.rgb - mean;
+            cov[0] += vec3<f32>(diff.x * diff.x, diff.x * diff.y, diff.x * diff.z);
+            cov[1] += vec3<f32>(diff.y * diff.x, diff.y * diff.y, diff.y * diff.z);
+            cov[2] += vec3<f32>(diff.z * diff.x, diff.z * diff.y, diff.z * diff.z);
+            count += 1.0;
         }
     }
 
+    let scale = select(1.0, 1.0 / count, count > 0.0);
+    return mat3x3<f32>(
+        cov[0] * scale,
+        cov[1] * scale,
+        cov[2] * scale
+    );
+}
+
+fn findPrincipalDirection(cov: mat3x3<f32>) -> vec3<f32> {
+    var v = normalize(vec3<f32>(1.0, 1.0, 1.0));
+    
+    // Power iteration
+    for (var i = 0u; i < 8u; i++) {
+        let new_v = vec3<f32>(
+            dot(cov[0], v),
+            dot(cov[1], v),
+            dot(cov[2], v)
+        );
+        v = normalize(new_v);
+    }
+    
+    return v;
+}
+
+fn projectColors(pixels: array<vec4<f32>, 16>, mean: vec3<f32>, direction: vec3<f32>) -> vec2<f32> {
+    var min_proj = 1000000.0;
+    var max_proj = -1000000.0;
+    var valid_projection = false;
+    
+    for (var i = 0u; i < 16u; i++) {
+        let pixel = getPixelComponents(pixels, i);
+        if (pixel.w >= 0.5) {
+            let diff = pixel.rgb - mean;
+            let proj = dot(diff, direction);
+            
+            // Test if this projection creates valid colors
+            let test_color = mean + direction * proj;
+            if (all(test_color >= vec3<f32>(0.0)) && all(test_color <= vec3<f32>(1.0))) {
+                min_proj = min(min_proj, proj);
+                max_proj = max(max_proj, proj);
+                valid_projection = true;
+            }
+        }
+    }
+    
+    // If no valid projections found, return 0 range
+    if (!valid_projection) {
+        return vec2<f32>(0.0, 0.0);
+    }
+    
+    return vec2<f32>(min_proj, max_proj);
+}
+
+struct MinMaxColors {
+    min: vec3<f32>,
+    max: vec3<f32>
+}
+
+fn findMinMaxColors(pixels: array<vec4<f32>, 16>) -> MinMaxColors {
+    var minColor = vec3<f32>(1.0);
+    var maxColor = vec3<f32>(0.0);
+    
+    for (var i = 0u; i < 16u; i++) {
+        let pixel = getPixelComponents(pixels, i);
+        if (pixel.w >= 0.5) {
+            minColor = min(minColor, pixel.rgb);
+            maxColor = max(maxColor, pixel.rgb);
+        }
+    }
+    
+    return MinMaxColors(minColor, maxColor);
+}
+fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
+    // Step 1: Calculate mean and establish color ranges directly
+    var mean = vec3<f32>(0.0);
+    var count = 0.0;
+    var validMax = vec3<f32>(0.0);
+    var validMin = vec3<f32>(1.0);
+    
+    // First pass: gather statistics
+    for (var i = 0u; i < 16u; i++) {
+        let pixel = getPixelComponents(pixels, i);
+        if (pixel.w >= 0.5) {
+            mean += pixel.rgb;
+            count += 1.0;
+            validMax = max(validMax, pixel.rgb);
+            validMin = min(validMin, pixel.rgb);
+        }
+    }
+    mean = mean / max(count, 1.0);
+
+    // Step 2: Calculate covariance while tracking color spread
+    let covariance = calculateCovariance(pixels, mean);
+    let direction = findPrincipalDirection(covariance);
+
+    // Step 3: Project and find endpoints
+    var minProj = 1000000.0;
+    var maxProj = -1000000.0;
+    
+    for (var i = 0u; i < 16u; i++) {
+        let pixel = getPixelComponents(pixels, i);
+        if (pixel.w >= 0.5) {
+            let diff = pixel.rgb - mean;
+            let proj = dot(diff, direction);
+            minProj = min(minProj, proj);
+            maxProj = max(maxProj, proj);
+        }
+    }
+
+    // Step 4: Determine final colors with safety checks
+    var minColor = clamp(mean + direction * minProj, vec3<f32>(0.0), vec3<f32>(1.0));
+    var maxColor = clamp(mean + direction * maxProj, vec3<f32>(0.0), vec3<f32>(1.0));
+
+    // Safety check: if colors are too close, use range directly
+    let colorDiff = distance(maxColor, minColor);
+    if (colorDiff < 0.001) {
+        minColor = validMin;
+        maxColor = validMax;
+    }
+
+    // Convert to 565 format
     let color0 = colorTo565(maxColor);
     let color1 = colorTo565(minColor);
 
+    // Build lookup table
     var lookupTable: u32 = 0u;
-
     for (var i = 0u; i < 16u; i++) {
         var bestIndex = 0u;
         var bestDistance = 1000000.0;
         let pixel = getPixelComponents(pixels, i);
-        let rgb = vec3<f32>(pixel.x, pixel.y, pixel.z);
         
         for (var j = 0u; j < 4u; j++) {
             let paletteColor = getColor(j, maxColor, minColor);
-            let distance = colorDistance(rgb, paletteColor);
+            let distance = colorDistance(pixel.rgb, paletteColor);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 bestIndex = j;
             }
         }
-        
         lookupTable |= bestIndex << (i * 2u);
     }
 
