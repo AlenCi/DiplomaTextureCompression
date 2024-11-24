@@ -40,18 +40,6 @@ Iterations (for random method): number (default: 1000)
     `);
 }
 
-async function loadImage(path) {
-    // For now, we'll just read the file
-    // We'll implement proper image loading in the next step
-    console.log("Loading image:", path);
-    return null;
-}
-
-async function saveDDS(compressedData, width, height, outputPath) {
-    // We'll implement DDS file saving in the next step
-    console.log("Saving DDS:", outputPath);
-}
-
 async function compress(inputPath, outputPath, method = 'pca', iterations = 1000) {
     try {
         console.log(`Compressing ${inputPath} to ${outputPath} using ${method} method...`);
