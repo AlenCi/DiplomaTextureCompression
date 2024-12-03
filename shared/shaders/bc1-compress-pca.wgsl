@@ -39,13 +39,23 @@ fn getPixelComponents(pixels: array<vec4<f32>, 16>, index: u32) -> vec4<f32> {
     return result;
 }
 
-fn getColor(index: u32, c0: vec3<f32>, c1: vec3<f32>) -> vec3<f32> {
-    switch(index) {
-        case 0u: { return c0; }
-        case 1u: { return c1; }
-        case 2u: { return mix(c0, c1, 0.3333); }
-        case 3u: { return mix(c0, c1, 0.6666); }
-        default: { return c0; }
+fn getColor(index: u32, c0: vec3<f32>, c1: vec3<f32>, useAlternateMode: bool) -> vec3<f32> {
+    if (useAlternateMode) {
+        switch(index) {
+            case 0u: { return c0; }
+            case 1u: { return c1; }
+            case 2u: { return (c0 + c1) * 0.5; }
+            case 3u: { return vec3<f32>(0.0); } // Black for unused transparent case
+            default: { return c0; }
+        }
+    } else {
+        switch(index) {
+            case 0u: { return c0; }
+            case 1u: { return c1; }
+            case 2u: { return mix(c0, c1, 0.3333); }
+            case 3u: { return mix(c0, c1, 0.6666); }
+            default: { return c0; }
+        }
     }
 }
 
@@ -117,54 +127,6 @@ fn findPrincipalDirection(cov: mat3x3<f32>) -> vec3<f32> {
     return v;
 }
 
-fn projectColors(pixels: array<vec4<f32>, 16>, mean: vec3<f32>, direction: vec3<f32>) -> vec2<f32> {
-    var min_proj = 1000000.0;
-    var max_proj = -1000000.0;
-    var valid_projection = false;
-    
-    for (var i = 0u; i < 16u; i++) {
-        let pixel = getPixelComponents(pixels, i);
-        if (pixel.w >= 0.5) {
-            let diff = pixel.rgb - mean;
-            let proj = dot(diff, direction);
-            
-            // Test if this projection creates valid colors
-            let test_color = mean + direction * proj;
-            if (all(test_color >= vec3<f32>(0.0)) && all(test_color <= vec3<f32>(1.0))) {
-                min_proj = min(min_proj, proj);
-                max_proj = max(max_proj, proj);
-                valid_projection = true;
-            }
-        }
-    }
-    
-    // If no valid projections found, return 0 range
-    if (!valid_projection) {
-        return vec2<f32>(0.0, 0.0);
-    }
-    
-    return vec2<f32>(min_proj, max_proj);
-}
-
-struct MinMaxColors {
-    min: vec3<f32>,
-    max: vec3<f32>
-}
-
-fn findMinMaxColors(pixels: array<vec4<f32>, 16>) -> MinMaxColors {
-    var minColor = vec3<f32>(1.0);
-    var maxColor = vec3<f32>(0.0);
-    
-    for (var i = 0u; i < 16u; i++) {
-        let pixel = getPixelComponents(pixels, i);
-        if (pixel.w >= 0.5) {
-            minColor = min(minColor, pixel.rgb);
-            maxColor = max(maxColor, pixel.rgb);
-        }
-    }
-    
-    return MinMaxColors(minColor, maxColor);
-}
 fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
     // Step 1: Calculate mean and establish color ranges directly
     var mean = vec3<f32>(0.0);
@@ -212,33 +174,83 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         minColor = validMin;
         maxColor = validMax;
     }
-
     // Convert to 565 format
-    let color0 = colorTo565(maxColor);
-    let color1 = colorTo565(minColor);
+    let color0_565 = colorTo565(maxColor);
+    let color1_565 = colorTo565(minColor);
 
-    // Build lookup table
-    var lookupTable: u32 = 0u;
-    for (var i = 0u; i < 16u; i++) {
-        var bestIndex = 0u;
-        var bestDistance = 1000000.0;
-        let pixel = getPixelComponents(pixels, i);
-        
-        for (var j = 0u; j < 4u; j++) {
-            let paletteColor = getColor(j, maxColor, minColor);
-            let distance = colorDistance(pixel.rgb, paletteColor);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                bestIndex = j;
+    // Try both modes and pick the one with least error
+    var bestError = 1000000.0;
+    var bestLookupTable: u32 = 0u;
+    var bestColor0 = color0_565;
+    var bestColor1 = color1_565;
+    var bestMode = false;
+
+    for (var mode = 0u; mode < 2u; mode++) {
+        let useAlternateMode = mode == 1u;
+        var currentLookupTable: u32 = 0u;
+        var totalError = 0.0;
+
+        for (var i = 0u; i < 16u; i++) {
+            var bestIndex = 0u;
+            var bestDistance = 1000000.0;
+            let pixel = getPixelComponents(pixels, i);
+            
+            if (pixel.w < 0.5) {
+                // For transparent pixels in alternate mode
+                if (useAlternateMode) {
+                    bestIndex = 3u;
+                    bestDistance = 0.0;
+                }
+            } else {
+                for (var j = 0u; j < 4u; j++) {
+                    let paletteColor = getColor(j, maxColor, minColor, useAlternateMode);
+                    let distance = colorDistance(pixel.rgb, paletteColor);
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        bestIndex = j;
+                    }
+                }
             }
+            
+            totalError += bestDistance;
+            currentLookupTable |= bestIndex << (i * 2u);
         }
-        lookupTable |= bestIndex << (i * 2u);
+
+        if (totalError < bestError) {
+            bestError = totalError;
+            bestLookupTable = currentLookupTable;
+            bestColor0 = color0_565;
+            bestColor1 = color1_565;
+            bestMode = useAlternateMode;
+        }
+    }
+
+    // If using alternate mode, ensure color0 < color1
+    if (bestMode && bestColor0 > bestColor1) {
+        let temp = bestColor0;
+        bestColor0 = bestColor1;
+        bestColor1 = temp;
+        
+        // Adjust indices
+        var newLookupTable: u32 = 0u;
+        for (var i = 0u; i < 16u; i++) {
+            let index = (bestLookupTable >> (i * 2u)) & 0x3u;
+            var newIndex = index;
+            if (index == 2u) {
+                newIndex = 3u;
+            } else if (index == 3u) {
+                newIndex = 2u;
+            }
+            newLookupTable |= newIndex << (i * 2u);
+        }
+        bestLookupTable = newLookupTable;
     }
 
     return array<u32, 2>(
-        color0 | (color1 << 16u),
-        lookupTable
+        bestColor0 | (bestColor1 << 16u),
+        bestLookupTable
     );
+
 }
 
 @compute @workgroup_size(8, 8)
