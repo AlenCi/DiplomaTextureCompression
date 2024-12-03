@@ -1,7 +1,7 @@
 // stats-display.js
 import { calculateMSE, calculatePSNR } from './compression-utils.js';
 import { decompressAndVisualize } from './visualization.js';
-import { DDSWebHandler } from '../shared/dds-web-handler.js';
+import { DDSHandler } from '../shared/dds-handler.js';
 
 export function displayCompressionResults(method, originalImage, compressedData, dimensions, compressedSize) {
     const { width, height, paddedWidth, paddedHeight } = dimensions;
@@ -21,7 +21,7 @@ export function displayCompressionResults(method, originalImage, compressedData,
     const downloadButton = document.createElement('button');
     downloadButton.textContent = `Download ${method}.dds`;
     downloadButton.className = 'download-btn';
-    downloadButton.onclick = () => DDSWebHandler.downloadDDS(compressedData, width, height, `${method}.dds`);
+    downloadButton.onclick = () => DDSHandler.downloadDDS(compressedData, width, height, `${method}.dds`);
     statsElement.appendChild(downloadButton);
 
     decompressAndVisualize(compressedData, width, height, paddedWidth, paddedHeight, `${method}-canvas`);
