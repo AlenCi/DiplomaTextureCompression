@@ -15,11 +15,13 @@ async function loadShaders() {
         const basicShaderPath = join(shadersDir, 'bc1-compress-basic.wgsl');
         const pcaShaderPath = join(shadersDir, 'bc1-compress-pca.wgsl');
         const randomShaderPath = join(shadersDir, 'bc1-compress-random.wgsl');
+        const clusterShaderPath = join(shadersDir, 'bc1-compress-cluster.wgsl');
         
         const shaderSources = {
             pca: await Deno.readTextFile(pcaShaderPath),
             basic: await Deno.readTextFile(basicShaderPath),
-            random: await Deno.readTextFile(randomShaderPath)
+            random: await Deno.readTextFile(randomShaderPath),
+            cluster: await Deno.readTextFile(clusterShaderPath),
         };
 
         return shaderSources;
@@ -128,7 +130,7 @@ async function main() {
                 const method = args[3] || 'pca';
                 const iterations = args[4] ? parseInt(args[4]) : 1000;
                 
-                if (!['pca', 'basic', 'random'].includes(method)) {
+                if (!['pca', 'basic', 'random','cluster'].includes(method)) {
                     throw new Error(`Invalid method: ${method}`);
                 }
                 

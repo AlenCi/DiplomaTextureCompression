@@ -1,10 +1,3 @@
-// bc1-compress-cluster.wgsl
-//
-// This shader implements a cluster-based (K-means-like) approach to determine BC1 endpoints,
-// using the CIEDE2000 metric to minimize perceptual color error. It also ensures color0 > color1
-// in the final compressed block. Adjust the cluster iteration count or logic as desired.
-//
-// Requires:
 @group(0) @binding(1) var inputTexture: texture_2d<f32>;
 @group(0) @binding(2) var<storage, read_write> outputBuffer: array<u32>;
 
@@ -43,7 +36,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     outputBuffer[outputIndex + 1u] = compressedBlock[1];
 }
 
-// ------------------------- Helper Functions -------------------------
 
 fn srgbToLinear(c: f32) -> f32 {
     return select(c / 12.92, pow((c + 0.055) / 1.055, 2.4), c > 0.04045);
@@ -167,11 +159,29 @@ fn colorTo565(color: vec3<f32>) -> u32 {
     return (u32(clamp(color.x*31.0,0.0,31.0)) << 11u) | (u32(clamp(color.y*63.0,0.0,63.0)) << 5u) | u32(clamp(color.z*31.0,0.0,31.0));
 }
 
-fn getPixelComponents(pixels: array<vec4<f32>,16>, i: u32) -> vec4<f32> {
-    return pixels[i];
+fn getPixelComponents(pixels: array<vec4<f32>, 16>, index: u32) -> vec4<f32> {
+    var result: vec4<f32>;
+    switch(index) {
+        case 0u: { result = pixels[0]; }
+        case 1u: { result = pixels[1]; }
+        case 2u: { result = pixels[2]; }
+        case 3u: { result = pixels[3]; }
+        case 4u: { result = pixels[4]; }
+        case 5u: { result = pixels[5]; }
+        case 6u: { result = pixels[6]; }
+        case 7u: { result = pixels[7]; }
+        case 8u: { result = pixels[8]; }
+        case 9u: { result = pixels[9]; }
+        case 10u: { result = pixels[10]; }
+        case 11u: { result = pixels[11]; }
+        case 12u: { result = pixels[12]; }
+        case 13u: { result = pixels[13]; }
+        case 14u: { result = pixels[14]; }
+        case 15u: { result = pixels[15]; }
+        default: { result = vec4<f32>(0.0); }
+    }
+    return result;
 }
-
-// ------------------------- Cluster Compression -------------------------
 
 fn compressBlockCluster(pixels: array<vec4<f32>,16>) -> array<u32,2> {
     var rgbPixels: array<vec3<f32>,16>;
