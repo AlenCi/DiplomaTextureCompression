@@ -67,8 +67,16 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         let randomColor0 = colorTo565(vec3<f32>(rand(), rand(), rand()));
         let randomColor1 = colorTo565(vec3<f32>(rand(), rand(), rand()));
         
-        let color0 = color565ToVec3(randomColor0);
-        let color1 = color565ToVec3(randomColor1);
+        // Enforce color0 > color1
+        var orderedColor0 = randomColor0;
+        var orderedColor1 = randomColor1;
+        if (randomColor0 < randomColor1) {
+            orderedColor0 = randomColor1;
+            orderedColor1 = randomColor0;
+        }
+        
+        let color0 = color565ToVec3(orderedColor0);
+        let color1 = color565ToVec3(orderedColor1);
         let color2 = mix(color0, color1, 1.0 / 3.0);
         let color3 = mix(color0, color1, 2.0 / 3.0);
         
@@ -84,7 +92,15 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
                     case 0u: { compressedColor = color0; }
                     case 1u: { compressedColor = color1; }
                     case 2u: { compressedColor = color2; }
-                    case 3u: { compressedColor = color3; }
+                    case 3u: { 
+                        // Only use color3 if color0 > color1
+                        if (orderedColor0 > orderedColor1) {
+                            compressedColor = color3;
+                        } else {
+                            // Transparent color or another logic
+                            compressedColor = vec3<f32>(0.0); // Example placeholder
+                        }
+                    }
                     default: { compressedColor = color0; }
                 }
                 let pixelError = calculateMSE(rgb, compressedColor);
@@ -95,8 +111,8 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         
         if (error < bestError) {
             bestError = error;
-            bestColor0 = randomColor0;
-            bestColor1 = randomColor1;
+            bestColor0 = orderedColor0;
+            bestColor1 = orderedColor1;
         }
     }
 
@@ -115,8 +131,20 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
             switch(j) {
                 case 0u: { paletteColor = c0; }
                 case 1u: { paletteColor = c1; }
-                case 2u: { paletteColor = mix(c0, c1, 1.0 / 3.0); }
-                case 3u: { paletteColor = mix(c0, c1, 2.0 / 3.0); }
+                case 2u: { 
+                    if (bestColor0 > bestColor1) {
+                        paletteColor = mix(c0, c1, 1.0 / 3.0); 
+                    } else {
+                        paletteColor = vec3<f32>(0.0); // Transparent or another logic
+                    }
+                }
+                case 3u: { 
+                    if (bestColor0 > bestColor1) {
+                        paletteColor = mix(c0, c1, 2.0 / 3.0); 
+                    } else {
+                        paletteColor = vec3<f32>(0.0); // Transparent or another logic
+                    }
+                }
                 default: { paletteColor = c0; }
             }
             let distance = calculateMSE(rgb, paletteColor);
@@ -134,6 +162,7 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         lookupTable
     );
 }
+
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {

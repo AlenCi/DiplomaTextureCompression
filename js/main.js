@@ -68,7 +68,7 @@ async function compressAllMethods() {
 
     clearResults();
 
-    const methods = ['pca', 'basic', 'random'];
+    const methods = ['pca', 'basic', 'random','cluster'];
     const iterations = parseInt(document.getElementById('iterations').value);
 
     displayOriginalImage(originalImage);

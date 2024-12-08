@@ -15,7 +15,8 @@ export class GPUSetup {
         const shaderSources = {
             pca: await fetch('../shared/shaders/bc1-compress-pca.wgsl').then(res => res.text()),
             basic: await fetch('../shared/shaders/bc1-compress-basic.wgsl').then(res => res.text()),
-            random: await fetch('../shared/shaders/bc1-compress-random.wgsl').then(res => res.text())
+            random: await fetch('../shared/shaders/bc1-compress-random.wgsl').then(res => res.text()),
+            cluster: await fetch('../shared/shaders/bc1-compress-cluster.wgsl').then(res => res.text())
         };
 
         this.compressionCore = new CompressionCore(this.device);

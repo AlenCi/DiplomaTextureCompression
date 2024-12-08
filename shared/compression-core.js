@@ -12,7 +12,8 @@ export class CompressionCore {
         console.log("Shader sources received:", {
             pca: shaderSources?.pca ? 'present' : 'missing',
             basic: shaderSources?.basic ? 'present' : 'missing',
-            random: shaderSources?.random ? 'present' : 'missing'
+            random: shaderSources?.random ? 'present' : 'missing',
+            cluster: shaderSources?.cluster ? 'present' : 'missing'
         });
 
         const shaderModules = {
@@ -24,6 +25,9 @@ export class CompressionCore {
             }),
             random: await this.device.createShaderModule({
                 code: shaderSources.random
+            }),
+            cluster: await this.device.createShaderModule({
+                code:shaderSources.cluster
             })
         };
 
@@ -38,7 +42,8 @@ export class CompressionCore {
         this.pipelines = {
             pca: this.createPipeline(shaderModules.pca),
             basic: this.createPipeline(shaderModules.basic),
-            random: this.createPipeline(shaderModules.random)
+            random: this.createPipeline(shaderModules.random),
+            cluster: this.createPipeline(shaderModules.cluster)
         };
     }
     createPipeline(shaderModule) {

@@ -9,13 +9,14 @@ export function displayCompressionResults(method, originalImage, compressedData,
     const compressionRatio = (width * height * 4 / compressedSize).toFixed(2);
     const mse = calculateMSE(originalImage, compressedData, width, height, paddedWidth, paddedHeight);
     const psnr = calculatePSNR(mse);
-    //const ssim = calculateSSIM(originalImage, compressedData, width, height, paddedWidth, paddedHeight);
+    const ssim = calculateSSIM(originalImage, compressedData, width, height, paddedWidth, paddedHeight);
 
     const statsElement = document.getElementById(`${method}-stats`);
     statsElement.textContent = `
         Compression ratio: ${compressionRatio}:1
         MSE: ${mse.toFixed(2)}
         PSNR: ${psnr.toFixed(2)} dB
+        SSIM: ${ssim.toFixed(2)}
    
     `;
 
