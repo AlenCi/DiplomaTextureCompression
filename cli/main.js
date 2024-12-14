@@ -37,7 +37,7 @@ Usage:
     Compression:   deno run --unstable --allow-read --allow-write cli/main.js compress <input-image> <output-dds> [method] [iterations]
     Decompression: deno run --unstable --allow-read --allow-write cli/main.js decompress <input-dds> <output-image>
 
-Methods: pca (default), basic, random
+Methods: pca (default), basic, random, cluster
 Iterations (for random method): number (default: 1000)
     `);
 }

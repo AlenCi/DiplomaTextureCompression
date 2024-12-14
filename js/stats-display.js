@@ -7,9 +7,9 @@ export function displayCompressionResults(method, originalImage, compressedData,
     const { width, height, paddedWidth, paddedHeight } = dimensions;
     
     const compressionRatio = (width * height * 4 / compressedSize).toFixed(2);
-    const mse = calculateMSE(originalImage, compressedData, width, height, paddedWidth, paddedHeight);
+    const mse = calculateMSE(originalImage, compressedData, paddedWidth, paddedHeight);
     const psnr = calculatePSNR(mse);
-    const ssim = calculateSSIM(originalImage, compressedData, width, height, paddedWidth, paddedHeight);
+    const ssim = calculateSSIM(originalImage, compressedData, paddedWidth, paddedHeight);
 
     const statsElement = document.getElementById(`${method}-stats`);
     statsElement.textContent = `

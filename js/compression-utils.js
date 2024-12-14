@@ -1,6 +1,6 @@
 // compression-utils.js
 
-export function calculateMSE(original, compressed, width, height, paddedWidth, paddedHeight) {
+export function calculateMSE(original, compressed, paddedWidth, paddedHeight) {
     const canvas = document.createElement('canvas');
     canvas.width = paddedWidth;
     canvas.height = paddedHeight;
@@ -35,7 +35,7 @@ export function calculatePSNR(mse) {
     return 10 * Math.log10(255 * 255 / mse);
 }
 
-export function calculateSSIM(original, compressed, width, height, paddedWidth, paddedHeight) {
+export function calculateSSIM(original, compressed, paddedWidth, paddedHeight) {
     const canvas = document.createElement('canvas');
     canvas.width = paddedWidth;
     canvas.height = paddedHeight;
@@ -133,9 +133,6 @@ export function calculateSSIM(original, compressed, width, height, paddedWidth, 
     const finalSSIM = ssimSum / windowCount;
     return finalSSIM;
 }
-
-
-
 
 export function getDecompressedColor(color0, color1, colorIndex) {
     const c0 = color565To888(color0);
