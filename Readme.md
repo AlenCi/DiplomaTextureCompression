@@ -1,6 +1,4 @@
-# Naslov diplome
-
-Kompresija tekstur z BC1
+# Kompresija tekstur z BC1
 
 ## Opis
 
@@ -65,12 +63,10 @@ deno run --unstable --allow-read --allow-write cli/main.js compress vhodna_slika
 - vhodna_slika.png: pot do vhodne slike (format PNG ali JPEG).
 - izhodna_slika.dds: ime in pot za shranjeno kompresirano DDS datoteko.
 - metoda: izbirate lahko med naslednjimi metodami:
-
-- pca (privzeta metoda)
-- basic
-- random
-- cluster
-
+  - `pca` (privzeta metoda)  
+  - `basic`  
+  - `random`  
+  - `cluster`
 - število_iteracij: (neobvezno) število iteracij, pomembno pri random metodi (privzeto: 10).
 
 #### Primer
