@@ -18,8 +18,18 @@ async function init() {
         displayOriginalImage(originalImage);
     });
 
-    document.getElementById('compress-btn').addEventListener('click', compressAllMethods);
+    document.getElementById('compress-btn').addEventListener('click', async () => {
+        // Existing compression logic
+        await compressAllMethods();
+    
+        // Make stats visible
+        document.querySelectorAll('.stats').forEach(stat => {
+            stat.style.display = 'block';
+        });
+    });
     document.getElementById('dds-upload').addEventListener('change', handleDDSUpload);
+
+    
 }
 
 async function handleDDSUpload(event) {

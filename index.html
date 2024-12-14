@@ -12,11 +12,13 @@
         <h1 class="mb-4">BC1 Texture Compression Demo</h1>
         
         <div class="mb-3">
+            <label for="image-upload" class="form-label">Upload an Image:</label>
             <input type="file" id="image-upload" class="form-control" accept="image/*">
         </div>
-
+    
         <div class="mb-3">
-            DDS File: <input type="file" id="dds-upload" accept=".dds">
+            <label for="dds-upload" class="form-label">Upload a DDS File:</label>
+            <input type="file" id="dds-upload" class="form-control" accept=".dds">
         </div>
         
         <div class="mb-3">
@@ -26,30 +28,35 @@
         
         <button id="compress-btn" class="btn btn-primary mb-4">Compress All</button>
         
-        <div id="compression-container" class="row">
-            <div class="col-md-6 mb-4">
+        <div class="row">
+            <div class="col-12 mb-4">
                 <h2>Original</h2>
                 <canvas id="original-canvas" class="img-fluid"></canvas>
             </div>
+        </div>
+
+        <hr class="separator">
+    
+        <div id="compression-container" class="row">
             <div class="col-md-6 mb-4">
                 <h2>PCA</h2>
                 <canvas id="pca-canvas" class="img-fluid"></canvas>
-                <pre id="pca-stats" class="stats mt-2"></pre>
+                <pre id="pca-stats" class="stats mt-2" style="display: none;"></pre>
             </div>
             <div class="col-md-6 mb-4">
                 <h2>Basic</h2>
                 <canvas id="basic-canvas" class="img-fluid"></canvas>
-                <pre id="basic-stats" class="stats mt-2"></pre>
+                <pre id="basic-stats" class="stats mt-2" style="display: none;"></pre>
             </div>
             <div class="col-md-6 mb-4">
                 <h2>Random</h2>
                 <canvas id="random-canvas" class="img-fluid"></canvas>
-                <pre id="random-stats" class="stats mt-2"></pre>
+                <pre id="random-stats" class="stats mt-2" style="display: none;"></pre>
             </div>
             <div class="col-md-6 mb-4">
                 <h2>Cluster</h2>
                 <canvas id="cluster-canvas" class="img-fluid"></canvas>
-                <pre id="cluster-stats" class="stats mt-2"></pre>
+                <pre id="cluster-stats" class="stats mt-2" style="display: none;"></pre>
             </div>
         </div>
     </div>

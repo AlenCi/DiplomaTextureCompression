@@ -38,6 +38,12 @@ canvas {
     font-family: monospace;
 }
 
+.separator {
+    border: 2px dashed #343a40; 
+    margin: 30px 0;            
+}
+
+
 /* Controls */
 #iterations {
     width: 80px;
