@@ -6,10 +6,18 @@
 var<private> seed: u32;
 
 fn rand() -> f32 {
-    // A simple linear congruential generator for randomness
-    seed = seed * 1664525u + 1013904223u;
-    return f32((seed >> 9u) & 0x7FFFFFu) / f32(0x800000u);
+    seed = seed * 747796405u + 2891336453u;
+    var result = ((seed >> ((seed >> 28u) + 4u)) ^ seed) * 277803737u;
+    result = (result >> 22u) ^ result;
+    return f32(result) / 4294967295.0;
 }
+
+
+// fn rand() -> f32 {
+    // A simple linear congruential generator for randomness
+//    seed = seed * 1664525u + 1013904223u;
+//    return f32((seed >> 9u) & 0x7FFFFFu) / f32(0x800000u);
+//}
 
 fn colorTo565(color: vec3<f32>) -> u32 {
     return (u32(clamp(color.x * 31.0,0.0,31.0)) << 11u) | (u32(clamp(color.y * 63.0,0.0,63.0)) << 5u) | u32(clamp(color.z * 31.0,0.0,31.0));
