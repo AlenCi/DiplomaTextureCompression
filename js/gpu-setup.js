@@ -23,6 +23,8 @@ export class GPUSetup {
     async init() {
         const adapter = await navigator.gpu?.requestAdapter();
         this.device = await adapter.requestDevice();
+
+        const basePath = this.getBasePath();
         
         // Load shaders in web-specific way
         const shaderSources = {
