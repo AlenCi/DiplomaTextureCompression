@@ -1,5 +1,4 @@
 // gpu-helpers.js
-
 export function createTexture(device, paddedWidth, paddedHeight, image) {
     const texture = device.createTexture({
         size: [paddedWidth, paddedHeight],

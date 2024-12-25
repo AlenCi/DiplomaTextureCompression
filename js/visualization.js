@@ -1,4 +1,5 @@
-// visualization.js
+// web/visualization.js
+import { DecompressionCore } from '../shared/decompression-core.js';
 
 export function displayOriginalImage(originalImage) {
     const canvas = document.getElementById('original-canvas');
@@ -22,45 +23,21 @@ export function decompressAndVisualize(compressedData, width, height, paddedWidt
     
     canvas.width = width * scale;
     canvas.height = height * scale;
-    
-    const imageData = ctx.createImageData(paddedWidth, paddedHeight);
 
-    for (let blockY = 0; blockY < paddedHeight / 4; blockY++) {
-        for (let blockX = 0; blockX < paddedWidth / 4; blockX++) {
-            const blockIndex = (blockY * (paddedWidth / 4) + blockX) * 2;
-            const color0 = compressedData[blockIndex] & 0xFFFF;
-            const color1 = compressedData[blockIndex] >> 16;
-            const lookupTable = compressedData[blockIndex + 1];
-            
-            const palette = [
-                color565To888(color0),
-                color565To888(color1),
-                color565To888(color0).map((v, i) => Math.round((2 * v + color565To888(color1)[i]) / 3)),
-                color565To888(color0).map((v, i) => Math.round((v + 2 * color565To888(color1)[i]) / 3))
-            ];
-            
-            for (let y = 0; y < 4; y++) {
-                for (let x = 0; x < 4; x++) {
-                    const colorIndex = (lookupTable >> ((y * 4 + x) * 2)) & 0x3;
-                    const color = palette[colorIndex];
-                    
-                    const imageX = blockX * 4 + x;
-                    const imageY = blockY * 4 + y;
-                    const i = (imageY * paddedWidth + imageX) * 4;
-                    imageData.data.set(color, i);
-                    imageData.data[i + 3] = 255;
-                }
-            }
-        }
-    }
+    // Use the shared decompression core
+    const pixels = DecompressionCore.decompress(compressedData, width, height, paddedWidth, paddedHeight);
+    
+    // Create ImageData and render to canvas
+    const imageData = new ImageData(width, height);
+    imageData.data.set(pixels);
     
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = paddedWidth;
-    tempCanvas.height = paddedHeight;
+    tempCanvas.width = width;
+    tempCanvas.height = height;
     const tempCtx = tempCanvas.getContext('2d');
     tempCtx.putImageData(imageData, 0, 0);
     
-    ctx.drawImage(tempCanvas, 0, 0, width, height, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(tempCanvas, 0, 0, canvas.width, canvas.height);
 }
 
 export function clearResults() {
@@ -74,15 +51,4 @@ export function clearResults() {
     stats.forEach(stat => {
         stat.textContent = '';
     });
-}
-
-function color565To888(color) {
-    const r = (color >> 11) & 0x1F;
-    const g = (color >> 5) & 0x3F;
-    const b = color & 0x1F;
-    return [
-        (r << 3) | (r >> 2),
-        (g << 2) | (g >> 4),
-        (b << 3) | (b >> 2)
-    ];
 }

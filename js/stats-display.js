@@ -17,7 +17,6 @@ export function displayCompressionResults(method, originalImage, compressedData,
         MSE: ${mse.toFixed(2)}
         PSNR: ${psnr.toFixed(2)} dB
         SSIM: ${ssim.toFixed(2)}
-   
     `;
 
     // Add download button
