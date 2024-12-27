@@ -123,17 +123,20 @@ export class CompressionHandler {
             // Create uniform buffer for random method
             console.log("Creating buffers for method:", method);
             let uniformBuffer;
+            const bufferSize = 12; // Space for three u32 values
+            
             if (method === 'random') {
                 uniformBuffer = this.device.createBuffer({
-                    size: 4,
+                    size: bufferSize,
                     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
                 });
-                this.device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([iterations]));
+                this.device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([iterations, 1, 1])); // Default to MSE and dithering enabled
             } else {
                 uniformBuffer = this.device.createBuffer({
-                    size: 4,
-                    usage: GPUBufferUsage.UNIFORM
+                    size: bufferSize,
+                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
                 });
+                this.device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([0, 1, 1])); // Default to MSE and dithering enabled
             }
 
             // Create output buffer

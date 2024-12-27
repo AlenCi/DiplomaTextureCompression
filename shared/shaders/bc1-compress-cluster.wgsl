@@ -1,41 +1,17 @@
+struct Uniforms {
+    iterations: u32,
+    useMSE: u32,
+    useDither: u32,
+};
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var inputTexture: texture_2d<f32>;
 @group(0) @binding(2) var<storage, read_write> outputBuffer: array<u32>;
 
-@compute @workgroup_size(8, 8)
-fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let dimensions = textureDimensions(inputTexture);
-    let width = dimensions.x;
-    let height = dimensions.y;
-    let paddedWidth = (width + 3u) & ~3u;
-    let paddedHeight = (height + 3u) & ~3u;
-    let blockX = global_id.x;
-    let blockY = global_id.y;
-
-    if (blockX >= paddedWidth / 4u || blockY >= paddedHeight / 4u) {
-        return;
-    }
-
-    var pixels: array<vec4<f32>,16>;
-    for (var y = 0u; y < 4u; y++) {
-        for (var x = 0u; x < 4u; x++) {
-            let pixelX = blockX * 4u + x;
-            let pixelY = blockY * 4u + y;
-            let pixel_index = y * 4u + x;
-
-            if (pixelX < width && pixelY < height) {
-                pixels[pixel_index] = textureLoad(inputTexture, vec2<i32>(i32(pixelX), i32(pixelY)), 0);
-            } else {
-                pixels[pixel_index] = vec4<f32>(0.0,0.0,0.0,1.0);
-            }
-        }
-    }
-
-    let compressedBlock = compressBlockCluster(pixels);
-    let outputIndex = (blockY * (paddedWidth / 4u) + blockX) * 2u;
-    outputBuffer[outputIndex] = compressedBlock[0];
-    outputBuffer[outputIndex + 1u] = compressedBlock[1];
+fn calculateMSE(original: vec3<f32>, compressed: vec3<f32>) -> f32 {
+    let diff = original - compressed;
+    return dot(diff, diff);
 }
-
 
 fn srgbToLinear(c: f32) -> f32 {
     return select(c / 12.92, pow((c + 0.055) / 1.055, 2.4), c > 0.04045);
@@ -77,8 +53,6 @@ fn xyzToLab(xyz: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(L, a, b);
 }
 
-// CIEDE2000 calculation
-// Reference: https://en.wikipedia.org/wiki/Color_difference#CIEDE2000
 fn cieDeltaE2000(lab1: vec3<f32>, lab2: vec3<f32>) -> f32 {
     let L1 = lab1.x; let a1 = lab1.y; let b1 = lab1.z;
     let L2 = lab2.x; let a2 = lab2.y; let b2 = lab2.z;
@@ -121,6 +95,30 @@ fn cieDeltaE2000(lab1: vec3<f32>, lab2: vec3<f32>) -> f32 {
     let deltaE = sqrt(termL*termL + termC*termC + termH*termH + Rt*termC*termH);
     return deltaE;
 }
+var<private> seed: u32;
+
+fn rand() -> f32 {
+    seed = seed * 747796405u + 2891336453u;
+    var result = ((seed >> ((seed >> 28u) + 4u)) ^ seed) * 277803737u;
+    result = (result >> 22u) ^ result;
+    return f32(result) / 4294967295.0;
+}
+
+fn applyDithering(pixels: array<vec4<f32>, 16>) -> array<vec4<f32>, 16> {
+    var ditheredPixels = pixels;
+    
+    // Only apply dithering if enabled via uniform
+    if (uniforms.useDither == 1u) {
+        for (var i = 0u; i < 16u; i++) {
+            let p = pixels[i];
+            let offset = (vec3<f32>(rand(), rand(), rand()) - 0.5) * 0.01;
+            ditheredPixels[i] = vec4<f32>(clamp(p.rgb + offset, vec3<f32>(0.0), vec3<f32>(1.0)), p.w);
+        }
+    }
+    
+    return ditheredPixels;
+}
+
 
 fn hueAngle(a: f32, b: f32) -> f32 {
     let h = degrees(atan2(b, a));
@@ -149,10 +147,14 @@ fn averageHue(h1: f32, h2: f32, C1p: f32, C2p: f32) -> f32 {
     return select((h1+h2+360.0)*0.5, (h1+h2-360.0)*0.5, h1+h2<360.0);
 }
 
-fn cieDistance(c1: vec3<f32>, c2: vec3<f32>) -> f32 {
-    let lab1 = xyzToLab(rgbToXyz(c1));
-    let lab2 = xyzToLab(rgbToXyz(c2));
-    return cieDeltaE2000(lab1, lab2);
+fn calculateError(c1: vec3<f32>, c2: vec3<f32>) -> f32 {
+    if (uniforms.useMSE == 1u) {
+        return calculateMSE(c1, c2);
+    } else {
+        let lab1 = xyzToLab(rgbToXyz(c1));
+        let lab2 = xyzToLab(rgbToXyz(c2));
+        return cieDeltaE2000(lab1, lab2);
+    }
 }
 
 fn colorTo565(color: vec3<f32>) -> u32 {
@@ -184,18 +186,18 @@ fn getPixelComponents(pixels: array<vec4<f32>, 16>, index: u32) -> vec4<f32> {
 }
 
 fn compressBlockCluster(pixels: array<vec4<f32>,16>) -> array<u32,2> {
+    let ditheredPixels = applyDithering(pixels);
     var rgbPixels: array<vec3<f32>,16>;
     var validMin = vec3<f32>(1.0);
     var validMax = vec3<f32>(0.0);
 
     for (var i = 0u; i < 16u; i++) {
-        let p = getPixelComponents(pixels, i).rgb;
+        let p = getPixelComponents(ditheredPixels, i).rgb;
         rgbPixels[i] = p;
         validMin = min(validMin, p);
         validMax = max(validMax, p);
     }
 
-    // Initialize cluster centers
     var colorA = validMin;
     var colorB = validMax;
 
@@ -206,11 +208,10 @@ fn compressBlockCluster(pixels: array<vec4<f32>,16>) -> array<u32,2> {
         var countA = 0u;
         var countB = 0u;
 
-        // Assign pixels to nearest cluster by CIEDE2000
         for (var i = 0u; i < 16u; i++) {
             let p = rgbPixels[i];
-            let dA = cieDistance(p, colorA);
-            let dB = cieDistance(p, colorB);
+            let dA = calculateError(p, colorA);
+            let dB = calculateError(p, colorB);
             if (dA < dB) {
                 clusterA[countA] = p;
                 countA++;
@@ -237,7 +238,6 @@ fn compressBlockCluster(pixels: array<vec4<f32>,16>) -> array<u32,2> {
         }
     }
 
-    // Ensure color0 > color1 in 565 form:
     let cA = colorTo565(colorA);
     let cB = colorTo565(colorB);
     var color0: u32 = cA;
@@ -245,7 +245,6 @@ fn compressBlockCluster(pixels: array<vec4<f32>,16>) -> array<u32,2> {
     var endA = colorA;
     var endB = colorB;
     if (cA <= cB) {
-        // Swap to ensure color0 > color1
         color0 = cB;
         color1 = cA;
         endA = colorB;
@@ -266,7 +265,7 @@ fn compressBlockCluster(pixels: array<vec4<f32>,16>) -> array<u32,2> {
         var bestIndex = 0u;
         var bestDistance = 1e9;
         for (var j = 0u; j < 4u; j++) {
-            let d = cieDistance(p, palette[j]);
+            let d = calculateError(p, palette[j]);
             if (d < bestDistance) {
                 bestDistance = d;
                 bestIndex = j;
@@ -279,4 +278,40 @@ fn compressBlockCluster(pixels: array<vec4<f32>,16>) -> array<u32,2> {
         color0 | (color1 << 16u),
         lookupTable
     );
+}
+
+@compute @workgroup_size(8, 8)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    seed = global_id.x + global_id.y * 99991u;
+    let dimensions = textureDimensions(inputTexture);
+    let width = dimensions.x;
+    let height = dimensions.y;
+    let paddedWidth = (width + 3u) & ~3u;
+    let paddedHeight = (height + 3u) & ~3u;
+    let blockX = global_id.x;
+    let blockY = global_id.y;
+
+    if (blockX >= paddedWidth / 4u || blockY >= paddedHeight / 4u) {
+        return;
+    }
+
+    var pixels: array<vec4<f32>,16>;
+    for (var y = 0u; y < 4u; y++) {
+        for (var x = 0u; x < 4u; x++) {
+            let pixelX = blockX * 4u + x;
+            let pixelY = blockY * 4u + y;
+            let pixel_index = y * 4u + x;
+
+            if (pixelX < width && pixelY < height) {
+                pixels[pixel_index] = textureLoad(inputTexture, vec2<i32>(i32(pixelX), i32(pixelY)), 0);
+            } else {
+                pixels[pixel_index] = vec4<f32>(0.0,0.0,0.0,1.0);
+            }
+        }
+    }
+
+    let compressedBlock = compressBlockCluster(pixels);
+    let outputIndex = (blockY * (paddedWidth / 4u) + blockX) * 2u;
+    outputBuffer[outputIndex] = compressedBlock[0];
+    outputBuffer[outputIndex + 1u] = compressedBlock[1];
 }

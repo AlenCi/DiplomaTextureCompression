@@ -1,5 +1,10 @@
-// bc1-compress-basic-improved.wgsl
+struct Uniforms {
+    iterations: u32,
+    useMSE: u32,
+    useDither: u32,
+};
 
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var inputTexture: texture_2d<f32>;
 @group(0) @binding(2) var<storage, read_write> outputBuffer: array<u32>;
 
@@ -12,12 +17,19 @@ fn rand() -> f32 {
     return f32(result) / 4294967295.0;
 }
 
-
-// fn rand() -> f32 {
-    // A simple linear congruential generator for randomness
-//    seed = seed * 1664525u + 1013904223u;
-//    return f32((seed >> 9u) & 0x7FFFFFu) / f32(0x800000u);
-//}
+fn applyDithering(pixels: array<vec4<f32>, 16>) -> array<vec4<f32>, 16> {
+    var ditheredPixels = pixels;
+    
+    if (uniforms.useDither == 1u) {
+        for (var i = 0u; i < 16u; i++) {
+            let p = pixels[i];
+            let offset = (vec3<f32>(rand(), rand(), rand()) - 0.5) * 0.01;
+            ditheredPixels[i] = vec4<f32>(clamp(p.rgb + offset, vec3<f32>(0.0), vec3<f32>(1.0)), p.w);
+        }
+    }
+    
+    return ditheredPixels;
+}
 
 fn colorTo565(color: vec3<f32>) -> u32 {
     return (u32(clamp(color.x * 31.0,0.0,31.0)) << 11u) | (u32(clamp(color.y * 63.0,0.0,63.0)) << 5u) | u32(clamp(color.z * 31.0,0.0,31.0));
@@ -29,7 +41,6 @@ fn colorDistance(c1: vec3<f32>, c2: vec3<f32>) -> f32 {
 }
 
 fn getPixelComponents(pixels: array<vec4<f32>, 16>, index: u32) -> vec4<f32> {
-    // Explicitly handle array access in a separate function
     var result: vec4<f32>;
     switch(index) {
         case 0u: { result = pixels[0]; }
@@ -82,14 +93,8 @@ fn evaluateBlockError(pixels: array<vec4<f32>,16>, c0: vec3<f32>, c1: vec3<f32>)
 }
 
 fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
-    // Apply dithering: add slight random variation to pixels
-    var ditheredPixels = pixels;
-    for (var i = 0u; i < 16u; i++) {
-        let p = pixels[i];
-        // Add a tiny random offset. Adjust magnitude as needed.
-        let offset = (vec3<f32>(rand(), rand(), rand()) - 0.5) * 0.01;
-        ditheredPixels[i] = vec4<f32>(clamp(p.rgb + offset, vec3<f32>(0.0), vec3<f32>(1.0)), p.w);
-    }
+    // Apply dithering through the unified function
+    let ditheredPixels = applyDithering(pixels);
 
     // Initial min/max selection
     let pixel0 = getPixelComponents(ditheredPixels, 0u);
@@ -105,20 +110,19 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
             continue;
         }
 
-        // Check distances to find extremes
         if (colorDistance(rgb, minColor) > colorDistance(maxColor, minColor)) {
             maxColor = rgb;
         } else if (colorDistance(rgb, maxColor) > colorDistance(minColor, maxColor)) {
             minColor = rgb;
         }
     }
-    // Endpoint refinement: try nearby variations of minColor and maxColor
+
     var bestC0 = maxColor;
     var bestC1 = minColor;
     var bestError = evaluateBlockError(ditheredPixels, bestC0, bestC1);
 
     let steps = 2u;
-    let stepSize = 0.02; // Adjust as needed
+    let stepSize = 0.02;
 
     for (var mx = 0u; mx <= steps; mx++) {
         for (var my = 0u; my <= steps; my++) {
@@ -144,6 +148,7 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
             }
         }
     }
+
     let color0 = colorTo565(bestC0);
     let color1 = colorTo565(bestC1);
 
@@ -187,7 +192,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
 
-    seed = blockX + blockY * 99991u; // some pseudo-random seed based on block location
+    seed = blockX + blockY * 99991u;
 
     var pixels: array<vec4<f32>,16>;
     for (var y = 0u; y < 4u; y++) {

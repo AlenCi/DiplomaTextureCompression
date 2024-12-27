@@ -1,5 +1,12 @@
 // shared/shaders/bc1-compress-pca.wgsl
 
+struct Uniforms {
+    iterations: u32, 
+    useMSE: u32,
+    useDither: u32, 
+};
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var inputTexture: texture_2d<f32>;
 @group(0) @binding(2) var<storage, read_write> outputBuffer: array<u32>;
 
@@ -13,6 +20,30 @@ fn colorTo565(color: vec3<f32>) -> u32 {
 fn colorDistance(c1: vec3<f32>, c2: vec3<f32>) -> f32 {
     let diff = c1 - c2;
     return dot(diff, diff);
+}
+
+var<private> seed: u32;
+
+fn rand() -> f32 {
+    seed = seed * 747796405u + 2891336453u;
+    var result = ((seed >> ((seed >> 28u) + 4u)) ^ seed) * 277803737u;
+    result = (result >> 22u) ^ result;
+    return f32(result) / 4294967295.0;
+}
+
+fn applyDithering(pixels: array<vec4<f32>, 16>) -> array<vec4<f32>, 16> {
+    var ditheredPixels = pixels;
+    
+    // Only apply dithering if enabled via uniform
+    if (uniforms.useDither == 1u) {
+        for (var i = 0u; i < 16u; i++) {
+            let p = pixels[i];
+            let offset = (vec3<f32>(rand(), rand(), rand()) - 0.5) * 0.01;
+            ditheredPixels[i] = vec4<f32>(clamp(p.rgb + offset, vec3<f32>(0.0), vec3<f32>(1.0)), p.w);
+        }
+    }
+    
+    return ditheredPixels;
 }
 
 fn getPixelComponents(pixels: array<vec4<f32>, 16>, index: u32) -> vec4<f32> {
@@ -118,7 +149,7 @@ fn findPrincipalDirection(cov: mat3x3<f32>) -> vec3<f32> {
 }
 
 fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
-    // Step 1: Calculate mean and establish color ranges directly
+    let ditheredPixels = applyDithering(pixels);
     var mean = vec3<f32>(0.0);
     var count = 0.0;
     var validMax = vec3<f32>(0.0);
@@ -126,7 +157,7 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
     
     // First pass: gather statistics
     for (var i = 0u; i < 16u; i++) {
-        let pixel = getPixelComponents(pixels, i);
+        let pixel = getPixelComponents(ditheredPixels, i);
         if (pixel.w >= 0.5) {
             mean += pixel.rgb;
             count += 1.0;
@@ -195,6 +226,7 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
 
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    seed = global_id.x + global_id.y * 99991u;
     let dimensions = textureDimensions(inputTexture);
     let width = dimensions.x;
     let height = dimensions.y;

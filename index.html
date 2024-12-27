@@ -25,6 +25,17 @@
             <label for="iterations" class="form-label">Iterations:</label>
             <input type="number" id="iterations" class="form-control" value="10" min="1" max="100">
         </div>
+
+        <div class="mb-3">
+            <div class="form-check">
+                <input type="checkbox" id="use-mse" class="form-check-input" checked>
+                <label class="form-check-label" for="use-mse">Use MSE for error metric</label>
+            </div>
+            <div class="form-check">
+                <input type="checkbox" id="use-dither" class="form-check-input" checked>
+                <label class="form-check-label" for="use-dither">Use dithering</label>
+            </div>
+        </div>
         
         <button id="compress-btn" class="btn btn-primary mb-4">Compress All</button>
         

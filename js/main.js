@@ -96,7 +96,11 @@ async function compressImageWebGPU(method, iterations) {
     const dimensions = { width, height, paddedWidth, paddedHeight };
 
     const texture = createTexture(device, paddedWidth, paddedHeight, originalImage);
-    const uniformBuffer = createUniformBuffer(device, method, iterations);
+    
+    const useMSE = document.getElementById('use-mse')?.checked ? 1 : 0;
+    const useDither = document.getElementById('use-dither')?.checked ? 1 : 0;
+    
+    const uniformBuffer = createUniformBuffer(device, method, iterations, useMSE, useDither);
     
     const { compressedBuffer, bindGroup, compressedSize } = setupCompression(
         device,
@@ -106,7 +110,7 @@ async function compressImageWebGPU(method, iterations) {
         texture,
         uniformBuffer
     );
-
+    
     const { compressedData, gpuReadBuffer } = await executeCompression(
         device,
         gpuSetup.getPipeline(method),
