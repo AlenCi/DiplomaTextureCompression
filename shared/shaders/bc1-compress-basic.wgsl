@@ -22,7 +22,7 @@ fn applyDithering(pixels: array<vec4<f32>, 16>) -> array<vec4<f32>, 16> {
     
     if (uniforms.useDither == 1u) {
         for (var i = 0u; i < 16u; i++) {
-            let p = pixels[i];
+            let p = getPixelComponents(pixels, i);  // Use getPixelComponents instead of direct access
             let offset = (vec3<f32>(rand(), rand(), rand()) - 0.5) * 0.01;
             ditheredPixels[i] = vec4<f32>(clamp(p.rgb + offset, vec3<f32>(0.0), vec3<f32>(1.0)), p.w);
         }
@@ -151,7 +151,7 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
 
     let color0 = colorTo565(bestC0);
     let color1 = colorTo565(bestC1);
-
+    var palette = buildBc1Palette(color0, color1);
     var lookupTable: u32 = 0u;
 
     for (var i = 0u; i < 16u; i++) {
@@ -161,8 +161,7 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         let rgb = pixel.rgb;
 
         for (var j = 0u; j < 4u; j++) {
-            let paletteColor = getColor(j, bestC0, bestC1);
-            let distance = colorDistance(rgb, paletteColor);
+            let distance = colorDistance(pixel.rgb, palette[j]);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 bestIndex = j;
@@ -176,6 +175,36 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         color0 | (color1 << 16u),
         lookupTable
     );
+}
+
+fn expand565ToFloat(c: u32) -> vec3<f32> {
+    let r = f32((c >> 11u) & 31u) / 31.0;
+    let g = f32((c >> 5u)  & 63u) / 63.0;
+    let b = f32( c         & 31u) / 31.0;
+    return vec3<f32>(r, g, b);
+}
+
+fn buildBc1Palette(c0_565: u32, c1_565: u32) -> array<vec3<f32>, 4> {
+    let c0f = expand565ToFloat(c0_565);
+    let c1f = expand565ToFloat(c1_565);
+    var pal: array<vec3<f32>, 4>;
+
+    // Assign color 0 and color 1
+    pal[0] = c0f;
+    pal[1] = c1f;
+
+    if (c0_565 > c1_565) {
+        // Standard 4-color interpolation
+        pal[2] = (2.0/3.0)*c0f + (1.0/3.0)*c1f;
+        pal[3] = (1.0/3.0)*c0f + (2.0/3.0)*c1f;
+    } else {
+        // 3-color + 1-bit alpha mode
+        pal[2] = 0.5 * (c0f + c1f);
+        // Usually black or transparent for color 3
+        pal[3] = vec3<f32>(0.0, 0.0, 0.0);
+    }
+
+    return pal;
 }
 
 @compute @workgroup_size(8, 8)

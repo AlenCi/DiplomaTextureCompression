@@ -1,125 +1,110 @@
+// image-quality-metrics.js
 export class ImageQualityMetrics {
-    // Calculate gaussian window 
-    static createGaussianWindow(size = 11, sigma = 1.5) {
-        const window = new Float32Array(size * size);
-        const center = Math.floor(size / 2);
-        let sum = 0;
 
-        for (let y = 0; y < size; y++) {
-            for (let x = 0; x < size; x++) {
-                const dx = x - center;
-                const dy = y - center;
-                const g = Math.exp(-(dx * dx + dy * dy) / (2 * sigma * sigma));
-                window[y * size + x] = g;
-                sum += g;
-            }
+    static calculateMSE(originalData, compressedData, paddedWidth, paddedHeight) {
+
+        let mse = 0;
+        for (let i = 0; i < originalData.length; i += 4) {
+            const diffR = originalData[i + 0] - compressedData[i + 0];
+            const diffG = originalData[i + 1] - compressedData[i + 1];
+            const diffB = originalData[i + 2] - compressedData[i + 2];
+            mse += diffR * diffR + diffG * diffG + diffB * diffB;
         }
 
-        // Normalize
-        for (let i = 0; i < window.length; i++) {
-            window[i] /= sum;
-        }
-
-        return window;
+        return mse / (paddedWidth * paddedHeight * 3);
     }
 
-    // Apply gaussian window to image region
-    static applyWindow(data, x, y, width, stride, window, windowSize) {
-        let sum = 0;
-        const center = Math.floor(windowSize / 2);
 
-        for (let wy = 0; wy < windowSize; wy++) {
-            for (let wx = 0; wx < windowSize; wx++) {
-                const imgX = x + wx - center;
-                const imgY = y + wy - center;
-                
-                if (imgX >= 0 && imgX < width && imgY >= 0 && imgY < data.length / stride) {
-                    const pixel = data[imgY * stride + imgX];
-                    sum += pixel * window[wy * windowSize + wx];
-                }
-            }
-        }
-
-        return sum;
+    static calculatePSNR(mse) {
+        // If mse is extremely small, avoid log(0)
+        if (mse <= 1e-12) return 99.0; // Some high fallback
+        return 10 * Math.log10((255.0 * 255.0) / mse);
     }
 
-    // Calculate SSIM for a single channel
-    static calculateSSIMChannel(img1Data, img2Data, width, height, stride, windowSize = 11, K1 = 0.01, K2 = 0.03) {
-        const L = 255;  // Dynamic range
-        const C1 = (K1 * L) ** 2;
-        const C2 = (K2 * L) ** 2;
-        
-        const window = this.createGaussianWindow(windowSize);
-        let ssimSum = 0;
-        let samples = 0;
+  
+    static calculateSSIM(originalData, compressedData, width, height) {
+        // Build grayscale arrays
+        const originalGray = new Float32Array(width * height);
+        const compressedGray = new Float32Array(width * height);
 
-        // Process every pixel
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-                // Skip if we don't have enough pixels for the window
-                if (x < windowSize/2 || x >= width - windowSize/2 || 
-                    y < windowSize/2 || y >= height - windowSize/2) {
-                    continue;
-                }
+                const idx = (y * width + x) * 4;
 
-                // Calculate means
-                const μx = this.applyWindow(img1Data, x, y, width, stride, window, windowSize);
-                const μy = this.applyWindow(img2Data, x, y, width, stride, window, windowSize);
+                // Original pixel
+                const R_o = originalData[idx + 0];
+                const G_o = originalData[idx + 1];
+                const B_o = originalData[idx + 2];
+                originalGray[y * width + x] =
+                    0.299 * R_o + 0.587 * G_o + 0.114 * B_o;
 
-                // Calculate variances and covariance
-                let σx = 0, σy = 0, σxy = 0;
+                // Compressed (already decompressed) pixel
+                const R_c = compressedData[idx + 0];
+                const G_c = compressedData[idx + 1];
+                const B_c = compressedData[idx + 2];
+                compressedGray[y * width + x] =
+                    0.299 * R_c + 0.587 * G_c + 0.114 * B_c;
+            }
+        }
 
-                for (let wy = 0; wy < windowSize; wy++) {
-                    for (let wx = 0; wx < windowSize; wx++) {
-                        const imgX = x + wx - Math.floor(windowSize/2);
-                        const imgY = y + wy - Math.floor(windowSize/2);
-                        
-                        if (imgX >= 0 && imgX < width && imgY >= 0 && imgY < height) {
-                            const w = window[wy * windowSize + wx];
-                            const px1 = img1Data[imgY * stride + imgX];
-                            const px2 = img2Data[imgY * stride + imgX];
-                            
-                            σx += w * (px1 - μx) ** 2;
-                            σy += w * (px2 - μy) ** 2;
-                            σxy += w * (px1 - μx) * (px2 - μy);
-                        }
+        // Standard SSIM constants
+        const L = 255;
+        const k1 = 0.01;
+        const k2 = 0.03;
+        const c1 = (k1 * L) ** 2; // (0.01*255)^2
+        const c2 = (k2 * L) ** 2; // (0.03*255)^2
+
+        // Use the same block size as compression-utils
+        const windowSize = 8;
+        let ssimSum = 0;
+        let windowCount = 0;
+
+        // Slide block by block (non-overlapping)
+        for (let wy = 0; wy <= height - windowSize; wy += windowSize) {
+            for (let wx = 0; wx <= width - windowSize; wx += windowSize) {
+                let sumX = 0;
+                let sumY = 0;
+                let sumX2 = 0;
+                let sumY2 = 0;
+                let sumXY = 0;
+                const N = windowSize * windowSize;
+
+                // Accumulate local sums
+                for (let j = 0; j < windowSize; j++) {
+                    for (let i = 0; i < windowSize; i++) {
+                        const idx = (wy + j) * width + (wx + i);
+                        const xVal = originalGray[idx];
+                        const yVal = compressedGray[idx];
+                        sumX += xVal;
+                        sumY += yVal;
+                        sumX2 += xVal * xVal;
+                        sumY2 += yVal * yVal;
+                        sumXY += xVal * yVal;
                     }
                 }
 
-                // Calculate SSIM
-                const numerator = (2 * μx * μy + C1) * (2 * σxy + C2);
-                const denominator = (μx * μx + μy * μy + C1) * (σx + σy + C2);
-                const ssim = numerator / denominator;
+                // Means
+                const meanX = sumX / N;
+                const meanY = sumY / N;
 
+                // Variances and covariance
+                const varX = sumX2 / N - meanX * meanX;
+                const varY = sumY2 / N - meanY * meanY;
+                const covXY = sumXY / N - meanX * meanY;
+
+                // SSIM for this block
+                const numerator =
+                    (2 * meanX * meanY + c1) * (2 * covXY + c2);
+                const denominator =
+                    (meanX * meanX + meanY * meanY + c1) *
+                    (varX + varY + c2);
+
+                const ssim = numerator / denominator;
                 ssimSum += ssim;
-                samples++;
+                windowCount++;
             }
         }
 
-        return ssimSum / samples;
-    }
-
-    // Calculate SSIM for RGB image
-    static calculateSSIM(originalImageData, compressedImageData, width, height) {
-        const ssimR = this.calculateSSIMChannel(
-            new Uint8Array(originalImageData.buffer).filter((_, i) => i % 4 === 0),
-            new Uint8Array(compressedImageData.buffer).filter((_, i) => i % 4 === 0),
-            width, height, 1
-        );
-        
-        const ssimG = this.calculateSSIMChannel(
-            new Uint8Array(originalImageData.buffer).filter((_, i) => i % 4 === 1),
-            new Uint8Array(compressedImageData.buffer).filter((_, i) => i % 4 === 1),
-            width, height, 1
-        );
-        
-        const ssimB = this.calculateSSIMChannel(
-            new Uint8Array(originalImageData.buffer).filter((_, i) => i % 4 === 2),
-            new Uint8Array(compressedImageData.buffer).filter((_, i) => i % 4 === 2),
-            width, height, 1
-        );
-
-        // Average SSIM across channels
-        return (ssimR + ssimG + ssimB) / 3;
+        return ssimSum / windowCount;
     }
 }

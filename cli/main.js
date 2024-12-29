@@ -42,9 +42,10 @@ Iterations (for random method): number (default: 1000)
     `);
 }
 
-async function compress(inputPath, outputPath, method = 'pca', iterations = 1000) {
+// cli/main.js modification
+async function compress(inputPath, outputPath, method = 'pca', parameters = {}) {
     try {
-        console.log(`Compressing ${inputPath} to ${outputPath} using ${method} method...`);
+        console.log(`Compressing ${inputPath} to ${outputPath} using ${method} method with parameters:`, parameters);
         
         const adapter = await navigator.gpu?.requestAdapter();
         if (!adapter) {
@@ -65,7 +66,7 @@ async function compress(inputPath, outputPath, method = 'pca', iterations = 1000
         console.log("Compression handler created");
         
         console.log("Starting image compression...");
-        const result = await handler.compressImage(inputPath, method, iterations);
+        const result = await handler.compressImage(inputPath, method, parameters);
         
         console.log("Compression complete, saving to DDS...");
         await DDSHandler.writeDDS(outputPath, result.width, result.height, result.compressedData);
@@ -74,11 +75,9 @@ async function compress(inputPath, outputPath, method = 'pca', iterations = 1000
         
     } catch (error) {
         console.error("Compression failed with error:", error);
-        console.error("Error stack:", error.stack);
         throw error;
     }
 }
-
 
 async function decompress(inputPath, outputPath) {
     try {

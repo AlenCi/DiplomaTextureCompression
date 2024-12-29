@@ -109,13 +109,19 @@ export class CompressionHandler {
         }
     }
 
-    async compressImage(path, method, iterations = 1000) {
+    async compressImage(pathOrData, method, iterations = 1000) {
         try {
-            console.log("Starting compression for:", path);
-            // Load the image
-            const { width, height, data } = await this.loadImage(path);
-            console.log("Image loaded successfully");
-            
+            let width, height, data;
+            if (typeof pathOrData === 'string') {
+                const imageData = await this.loadImage(pathOrData);
+                width = imageData.width;
+                height = imageData.height;
+                data = imageData.data;
+            } else {
+                width = pathOrData.width;
+                height = pathOrData.height;
+                data = pathOrData.data;
+            }
             // Create input texture
             const { texture, paddedWidth, paddedHeight } = this.createInputTexture(data, width, height);
             console.log("Input texture created");
@@ -130,13 +136,13 @@ export class CompressionHandler {
                     size: bufferSize,
                     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
                 });
-                this.device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([iterations, 1, 1])); // Default to MSE and dithering enabled
+                this.device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([iterations, 0, 0])); // Default to MSE and dithering enabled
             } else {
                 uniformBuffer = this.device.createBuffer({
                     size: bufferSize,
                     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
                 });
-                this.device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([0, 1, 1])); // Default to MSE and dithering enabled
+                this.device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([0, 0, 0])); // Default to MSE and dithering enabled
             }
 
             // Create output buffer
@@ -185,6 +191,7 @@ export class CompressionHandler {
             console.log("Creating final data copy");
             const resultData = new Uint32Array(compressedData);
             gpuReadBuffer.unmap();
+            console.log("Unmap done");
 
             return {
                 width,

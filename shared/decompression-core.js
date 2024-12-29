@@ -21,11 +21,12 @@ export class DecompressionCore {
                 const palette = [
                     this.color565ToRGB(color0),
                     this.color565ToRGB(color1),
-                    this.color565ToRGB(color0).map((v, i) => 
-                        Math.round((2 * v + this.color565ToRGB(color1)[i]) / 3)),
-                    this.color565ToRGB(color0).map((v, i) => 
-                        Math.round((v + 2 * this.color565ToRGB(color1)[i]) / 3))
+                    this.color565ToRGB(color0).map((v, i) =>
+                        Math.floor((2 * v + this.color565ToRGB(color1)[i]) / 3)),
+                    this.color565ToRGB(color0).map((v, i) =>
+                        Math.floor((v + 2 * this.color565ToRGB(color1)[i]) / 3))
                 ];
+                
 
                 for (let y = 0; y < 4; y++) {
                     for (let x = 0; x < 4; x++) {

@@ -107,10 +107,9 @@ fn rand() -> f32 {
 fn applyDithering(pixels: array<vec4<f32>, 16>) -> array<vec4<f32>, 16> {
     var ditheredPixels = pixels;
     
-    // Only apply dithering if enabled via uniform
     if (uniforms.useDither == 1u) {
         for (var i = 0u; i < 16u; i++) {
-            let p = pixels[i];
+            let p = getPixelComponents(pixels, i);  // Use getPixelComponents instead of direct access
             let offset = (vec3<f32>(rand(), rand(), rand()) - 0.5) * 0.01;
             ditheredPixels[i] = vec4<f32>(clamp(p.rgb + offset, vec3<f32>(0.0), vec3<f32>(1.0)), p.w);
         }
@@ -184,6 +183,12 @@ fn getPixelComponents(pixels: array<vec4<f32>, 16>, index: u32) -> vec4<f32> {
     }
     return result;
 }
+fn expand565ToFloat(c: u32) -> vec3<f32> {
+    let r = f32((c >> 11u) & 31u) / 31.0;
+    let g = f32((c >> 5u)  & 63u) / 63.0;
+    let b = f32( c         & 31u) / 31.0;
+    return vec3<f32>(r, g, b);
+}
 
 fn compressBlockCluster(pixels: array<vec4<f32>,16>) -> array<u32,2> {
     let ditheredPixels = applyDithering(pixels);
@@ -240,21 +245,17 @@ fn compressBlockCluster(pixels: array<vec4<f32>,16>) -> array<u32,2> {
 
     let cA = colorTo565(colorA);
     let cB = colorTo565(colorB);
+   
     var color0: u32 = cA;
     var color1: u32 = cB;
     var endA = colorA;
     var endB = colorB;
-    if (cA <= cB) {
-        color0 = cB;
-        color1 = cA;
-        endA = colorB;
-        endB = colorA;
-    }
+
 
     var lookupTable: u32 = 0u;
     var palette: array<vec3<f32>,4>;
-    let c0f = endA;
-    let c1f = endB;
+    let c0f = expand565ToFloat(cA);
+    let c1f = expand565ToFloat(cB);
     palette[0] = c0f;
     palette[1] = c1f;
     palette[2] = mix(c0f, c1f, 1.0/3.0);

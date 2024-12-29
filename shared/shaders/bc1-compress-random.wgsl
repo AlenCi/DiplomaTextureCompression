@@ -20,10 +20,9 @@ fn rand() -> f32 {
 fn applyDithering(pixels: array<vec4<f32>, 16>) -> array<vec4<f32>, 16> {
     var ditheredPixels = pixels;
     
-    // Only apply dithering if enabled via uniform
     if (uniforms.useDither == 1u) {
         for (var i = 0u; i < 16u; i++) {
-            let p = pixels[i];
+            let p = getPixelComponents(pixels, i);  // Use getPixelComponents instead of direct access
             let offset = (vec3<f32>(rand(), rand(), rand()) - 0.5) * 0.01;
             ditheredPixels[i] = vec4<f32>(clamp(p.rgb + offset, vec3<f32>(0.0), vec3<f32>(1.0)), p.w);
         }
@@ -251,7 +250,7 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
     for (var i = 0u; i < 16u; i++) {
         var bestIndex = 0u;
         var bestDistance = 1000000.0;
-        let pixel = getPixelComponents(pixels, i);
+        let pixel = getPixelComponents(ditheredPixels, i);
         let rgb = vec3<f32>(pixel.x, pixel.y, pixel.z);
         
         for (var j = 0u; j < 4u; j++) {
