@@ -179,10 +179,10 @@ fn buildBc1Palette(c0_565: u32, c1_565: u32) -> array<vec3<f32>, 4> {
 
 
 fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
-    // 1) Dither the input if enabled
+    // 1 Dither the input if enabled
     let ditheredPixels = applyDithering(pixels);
 
-    // 2) Compute stats (mean, validMin, validMax)
+    // 2 Compute stats (mean, validMin, validMax)
     var mean = vec3<f32>(0.0);
     var count = 0.0;
     var validMax = vec3<f32>(0.0);
@@ -199,11 +199,11 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
     }
     mean = mean / max(count, 1.0);
 
-    // 3) PCA: covariance + principal direction
+    // 3 PCA: covariance + principal direction
     let covariance = calculateCovariance(ditheredPixels, mean);
     let direction = findPrincipalDirection(covariance);
 
-    // 4) Project all valid pixels onto that direction to get min/max projection
+    // 4 Project all valid pixels onto that direction to get min/max projection
     var minProj = 1e6;
     var maxProj = -1e6;
     for (var i = 0u; i < 16u; i++) {
@@ -216,30 +216,30 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         }
     }
 
-    // 5) Derive float endpoints
+    // 5 Derive float endpoints
     var minColor = clamp(mean + direction * minProj, vec3<f32>(0.0), vec3<f32>(1.0));
     var maxColor = clamp(mean + direction * maxProj, vec3<f32>(0.0), vec3<f32>(1.0));
 
-    // 6) Safety check: if extremely close, use the block's range
+    // 6 Safety check: if extremely close, use the block's range
     let colorDiff = distance(maxColor, minColor);
     if (colorDiff < 0.001) {
         minColor = validMin;
         maxColor = validMax;
     }
 
-    // 7) Convert to 565
+    // 7 Convert to 565
     let initialC0 = colorTo565(maxColor);
     let initialC1 = colorTo565(minColor);
 
-    // 8) Refine endpoints in 565 space
+    // 8 Refine endpoints in 565 space
     let refined = refineEndpoints(initialC0, initialC1, ditheredPixels);
     let color0 = refined[0];
     let color1 = refined[1];
 
-    // 9) Build BC1 palette from final endpoints
+    // 9 Build BC1 palette from final endpoints
     var palette = buildBc1Palette(color0, color1);
 
-    // 10) Pick indices
+    // 10 Pick indices
     var lookupTable: u32 = 0u;
     for (var i = 0u; i < 16u; i++) {
         let pixel = getPixelComponents(ditheredPixels, i);
@@ -255,7 +255,7 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         lookupTable |= (bestIndex << (i * 2u));
     }
 
-    // 11) Return final block
+    // 11 Return final block
     return array<u32, 2>(
         color0 | (color1 << 16u),
         lookupTable
