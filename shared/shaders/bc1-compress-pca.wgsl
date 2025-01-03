@@ -17,7 +17,7 @@ fn colorTo565(color: vec3<f32>) -> u32 {
     return (r << 11u) | (g << 5u) | b;
 }
 
-fn colorDistance(c1: vec3<f32>, c2: vec3<f32>) -> f32 {
+fn calculateMSE(c1: vec3<f32>, c2: vec3<f32>) -> f32 {
     let diff = c1 - c2;
     return dot(diff, diff);
 }
@@ -246,7 +246,7 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         var bestIndex = 0u;
         var bestDistance = 1e9;
         for (var j = 0u; j < 4u; j++) {
-            let distance = colorDistance(pixel.rgb, palette[j]);
+            let distance = calculateMSE(pixel.rgb, palette[j]);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 bestIndex = j;
@@ -272,12 +272,11 @@ fn computeBlockError(c0_565: u32, c1_565: u32, blockPixels: array<vec4<f32>, 16>
     for (var i = 0u; i < 16u; i++) {
         let pixel = getPixelComponents(blockPixels, i);
         if (pixel.w < 0.5) {
-            // Treat fully transparent pixels as zero error or skip?
             continue;
         }
         var bestDist = 1e9;
         for (var j = 0u; j < 4u; j++) {
-            let dist = colorDistance(pixel.rgb, palette[j]);
+            let dist = calculateMSE(pixel.rgb, palette[j]);
             if (dist < bestDist) {
                 bestDist = dist;
             }

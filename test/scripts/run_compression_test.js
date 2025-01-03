@@ -8,6 +8,7 @@ import { DecompressionHandler } from "../../shared/decompression-handler.js";
 import { ImageQualityMetrics } from "../../shared/image-quality-metrics.js";
 
 const COMPRESSONATOR_PATH = "C:\\Compressonator_4.5.52\\bin\\CLI\\compressonatorcli.exe";
+const NVCOMPRESS_PATH = "C:\\Program Files\\NVIDIA Corporation\\NVIDIA Texture Tools\\nvcompress.exe";
 
 class CompressionTester {
     constructor() {
@@ -20,6 +21,7 @@ class CompressionTester {
         this.compressionCore = null;
         this.compressionHandler = null;
         this.currentImageData = null;
+        this.currentImagePath = null;
     }
 
     async init() {
@@ -46,6 +48,41 @@ class CompressionTester {
         }
     }
 
+    async runSSIM(originalPath, compressedPath) {
+        const cmd = [
+            "pyiqa",
+            "ssim",
+            "-t", originalPath,
+            "-r", compressedPath
+        ];
+
+        const process = new Deno.Command(cmd[0], {
+            args: cmd.slice(1),
+            stdout: "piped",
+            stderr: "piped"
+        });
+
+        const { code, stdout, stderr } = await process.output();
+
+        if (code !== 0) {
+            const err = new TextDecoder().decode(stderr);
+            console.error("pyiqa error:", err);
+            throw new Error(`pyiqa failed with code ${code}`);
+        }
+
+        const outputStr = new TextDecoder().decode(stdout);
+
+        let ssimValue = 0.0;
+        const match = outputStr.match(/ssim.*?\b(\d+(\.\d+)?)/i);
+        if (match) {
+            ssimValue = parseFloat(match[1]);
+        } else {
+            console.warn("Could not parse SSIM from pyiqa output:", outputStr);
+        }
+
+        return ssimValue;
+    }
+
     async loadShaders() {
         const shadersDir = join(this.testDir, '..', '..', 'shared', 'shaders');
         return {
@@ -53,59 +90,6 @@ class CompressionTester {
             basic: await Deno.readTextFile(join(shadersDir, 'bc1-compress-basic.wgsl')),
             random: await Deno.readTextFile(join(shadersDir, 'bc1-compress-random.wgsl')),
             cluster: await Deno.readTextFile(join(shadersDir, 'bc1-compress-cluster.wgsl'))
-        };
-    }
-
-    async calculateMetrics(compressedData, width, height) {
-        const decompressedPixels = DecompressionHandler.decompress(
-            compressedData,
-            width,
-            height,
-            Math.ceil(width / 4) * 4,
-            Math.ceil(height / 4) * 4
-        );
-        console.log("Got decompressed")
-
-        const originalData = this.currentImageData.data;
-        let mse = 0;
-        const pixelCount = width * height;
-
-        // Batch process pixels for better performance
-        const batchSize = 1024;
-        for (let batch = 0; batch < pixelCount * 4; batch += batchSize * 4) {
-            const endBatch = Math.min(batch + batchSize * 4, pixelCount * 4);
-            for (let i = batch; i < endBatch; i += 4) {
-                const origR = originalData[i] / 255.0;
-                const origG = originalData[i + 1] / 255.0;
-                const origB = originalData[i + 2] / 255.0;
-                
-                const decompR = decompressedPixels[i] / 255.0;
-                const decompG = decompressedPixels[i + 1] / 255.0;
-                const decompB = decompressedPixels[i + 2] / 255.0;
-
-                const diffR = origR - decompR;
-                const diffG = origG - decompG;
-                const diffB = origB - decompB;
-
-                mse += diffR * diffR + diffG * diffG + diffB * diffB;
-            }
-        }
-
-        mse /= (pixelCount * 3);
-        const psnr = mse > 0 ? -10.0 * Math.log10(mse) : 100.0;
-        console.log("Got mse stuff")
-
-        const ssim = ImageQualityMetrics.calculateSSIM(
-            originalData,
-            decompressedPixels,
-            width,
-            height
-        );
-
-        return { 
-            ssim, 
-            mse: mse * 255 * 255,
-            psnr 
         };
     }
 
@@ -123,28 +107,30 @@ class CompressionTester {
             const endTime = performance.now();
 
             const filename = this.currentImagePath.split(/[\/\\]/).pop();
-            const outputPath = join(this.compressedDir, 
+            const outputDDS = join(
+                this.compressedDir, 
                 `${filename}_${config.method}_${
-                    Object.entries(config.parameters || {}).map(([k,v]) => `${k}${v}`).join('_')
-                }.dds`);
-            console.log("Writing dds")
-
-            await DDSHandler.writeDDS(outputPath, result.width, result.height, result.compressedData);
-
-            console.log("Got dds")
-            // Calculate metrics before releasing GPU resources
-            const metrics = await this.calculateMetrics(
-                result.compressedData,
-                result.width,
-                result.height
+                    Object.entries(config.parameters || {})
+                        .map(([k,v]) => `${k}${v}`)
+                        .join('_')
+                }.dds`
             );
+            console.log("Writing dds");
+
+            await DDSHandler.writeDDS(outputDDS, result.width, result.height, result.compressedData);
+
+            console.log("Got dds");
+
+            const ssim = await this.runSSIM(this.currentImagePath, outputDDS);
+
+
             return {
                 method: config.method,
                 parameters: config.parameters,
                 metrics: {
                     compressionTime: endTime - startTime,
-                    compressedSize: result.compressedSize,
-                    ...metrics
+                    compressedSize: result.compressedData.byteLength,
+                    ssim
                 }
             };
         } catch (error) {
@@ -199,19 +185,70 @@ class CompressionTester {
         }
     
         const ddsData = await DDSHandler.readDDS(outputPath);
-        const metrics = await this.calculateMetrics(
-            ddsData.compressedData,
-            ddsData.width,
-            ddsData.height
-        );
-    
+        const ssim = await this.runSSIM(this.currentImagePath, outputPath);
+
         return {
             method: "compressonator",
             parameters: config,
             metrics: {
                 compressionTime: endTime - startTime,
                 compressedSize: (await Deno.stat(outputPath)).size,
-                ...metrics
+                ssim
+            }
+        };
+    }
+
+    async runNVCompress(config = {}) {
+
+        const filename = this.currentImagePath.split(/[\/\\]/).pop();
+        const outputPath = join(
+            this.compressedDir,
+            `${filename}_nvcompress${
+                config.fast ? '_fast' : ''
+            }.dds`
+        );
+
+        const cmd = [NVCOMPRESS_PATH];
+        
+        if (config.fast) {
+            cmd.push("-fast");
+        } else if (config.highest) {
+            cmd.push("-highest");
+        } 
+
+        cmd.push("-bc1");
+
+        // cmd.push("-color");
+
+        cmd.push(this.currentImagePath);
+        cmd.push(outputPath);
+
+        const startTime = performance.now();
+        
+        const process = new Deno.Command(cmd[0], {
+            args: cmd.slice(1),
+            stdout: "piped",
+            stderr: "piped"
+        });
+
+        const { code, stdout, stderr } = await process.output();
+        const endTime = performance.now();
+
+        if (code !== 0) {
+            const errorOutput = new TextDecoder().decode(stderr);
+            console.error("nvcompress stderr:", errorOutput);
+            throw new Error(`nvcompress failed with code ${code}`);
+        }
+
+        const ssim = await this.runSSIM(this.currentImagePath, outputPath);
+
+        return {
+            method: "nvcompress",
+            parameters: config,
+            metrics: {
+                compressionTime: endTime - startTime,
+                compressedSize: (await Deno.stat(outputPath)).size,
+                ssim
             }
         };
     }
@@ -234,6 +271,11 @@ class CompressionTester {
             { useGPU: false },
             { useGPU: true },
             { useGPU: true, refineSteps: 2 }
+        ];
+
+        const nvcompressConfigs = [
+            { fast: true },
+            { highest: true }
         ];
 
         const allResults = [];
@@ -270,6 +312,16 @@ class CompressionTester {
                 }
             }
 
+             // Test Nvidia
+            for (const config of nvcompressConfigs) {
+                try {
+                    const result = await this.runNVCompress(config);
+                    imageResults.push(result);
+                } catch (error) {
+                    console.error(`Error with NV Compress:`, error);
+                }
+            }
+
             allResults.push({
                 image: imagePath,
                 results: imageResults
@@ -302,8 +354,6 @@ async function main() {
                 console.log(`\n${result.method}:`);
                 console.log("Parameters:", result.parameters);
                 console.log("Metrics:", {
-                    PSNR: result.metrics.psnr.toFixed(2),
-                    MSE: result.metrics.mse.toFixed(2),
                     SSIM: result.metrics.ssim.toFixed(4),
                     "Time (ms)": result.metrics.compressionTime.toFixed(0),
                     "Size (bytes)": result.metrics.compressedSize
