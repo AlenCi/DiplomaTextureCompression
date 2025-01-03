@@ -161,12 +161,11 @@ fn colorTo565(color: vec3<f32>) -> u32 {
     return (u32(color.x * 31.0) << 11u) | (u32(color.y * 63.0) << 5u) | u32(color.z * 31.0);
 }
 
-fn color565ToVec3(color: u32) -> vec3<f32> {
-    return vec3<f32>(
-        f32((color >> 11u) & 31u) / 31.0,
-        f32((color >> 5u) & 63u) / 63.0,
-        f32(color & 31u) / 31.0,
-    );
+fn expand565ToFloat(c: u32) -> vec3<f32> {
+    let r = f32((c >> 11u) & 31u) / 31.0;
+    let g = f32((c >> 5u)  & 63u) / 63.0;
+    let b = f32( c         & 31u) / 31.0;
+    return vec3<f32>(r, g, b);
 }
 
 fn getPixelComponents(pixels: array<vec4<f32>, 16>, index: u32) -> vec4<f32> {
@@ -210,8 +209,8 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
             orderedColor1 = randomColor0;
         }
         
-        let color0 = color565ToVec3(orderedColor0);
-        let color1 = color565ToVec3(orderedColor1);
+        let color0 = expand565ToFloat(orderedColor0);
+        let color1 = expand565ToFloat(orderedColor1);
         let color2 = mix(color0, color1, 1.0 / 3.0);
         let color3 = mix(color0, color1, 2.0 / 3.0);
         
@@ -244,8 +243,8 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
     }
 
     var lookupTable: u32 = 0u;
-    let c0 = color565ToVec3(bestColor0);
-    let c1 = color565ToVec3(bestColor1);
+    let c0 = expand565ToFloat(bestColor0);
+    let c1 = expand565ToFloat(bestColor1);
 
     for (var i = 0u; i < 16u; i++) {
         var bestIndex = 0u;

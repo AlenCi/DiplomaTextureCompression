@@ -147,12 +147,13 @@ export function getDecompressedColor(color0, color1, colorIndex) {
 }
 
 export function color565To888(color) {
-    const r = (color >> 11) & 0x1F;
-    const g = (color >> 5) & 0x3F;
-    const b = color & 0x1F;
-    return [
-        (r << 3) | (r >> 2),
-        (g << 2) | (g >> 4),
-        (b << 3) | (b >> 2)
-    ];
+    const r5 = ((color >> 11) & 0x1F);
+    const g6 = ((color >> 5) & 0x3F);
+    const b5 = (color & 0x1F);
+
+    const r = Math.round((r5 ) * (255 / 31)); // Scale 5 bits to 8 bits
+    const g = Math.round((g6 ) * (255 / 63)); // Scale 6 bits to 8 bits
+    const b = Math.round((b5 ) * (255 / 31)); // Scale 5 bits to 8 bits
+
+    return [r, g, b];
 }

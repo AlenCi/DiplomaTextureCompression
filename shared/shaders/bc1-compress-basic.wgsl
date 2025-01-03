@@ -35,8 +35,8 @@ fn colorTo565(color: vec3<f32>) -> u32 {
     return (u32(clamp(color.x * 31.0,0.0,31.0)) << 11u) | (u32(clamp(color.y * 63.0,0.0,63.0)) << 5u) | u32(clamp(color.z * 31.0,0.0,31.0));
 }
 
-fn colorDistance(c1: vec3<f32>, c2: vec3<f32>) -> f32 {
-    let diff = c1 - c2;
+fn calculateMSE(original: vec3<f32>, compressed: vec3<f32>) -> f32 {
+    let diff = original - compressed;
     return dot(diff, diff);
 }
 
@@ -82,7 +82,7 @@ fn evaluateBlockError(pixels: array<vec4<f32>,16>, c0: vec3<f32>, c1: vec3<f32>)
         var bestDist = 1e9;
         for (var j = 0u; j < 4u; j++) {
             let paletteColor = getColor(j, c0, c1);
-            let dist = colorDistance(rgb, paletteColor);
+            let dist = calculateMSE(rgb, paletteColor);
             if (dist < bestDist) {
                 bestDist = dist;
             }
@@ -110,9 +110,9 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
             continue;
         }
 
-        if (colorDistance(rgb, minColor) > colorDistance(maxColor, minColor)) {
+        if (calculateMSE(rgb, minColor) > calculateMSE(maxColor, minColor)) {
             maxColor = rgb;
-        } else if (colorDistance(rgb, maxColor) > colorDistance(minColor, maxColor)) {
+        } else if (calculateMSE(rgb, maxColor) > calculateMSE(minColor, maxColor)) {
             minColor = rgb;
         }
     }
@@ -161,7 +161,7 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         let rgb = pixel.rgb;
 
         for (var j = 0u; j < 4u; j++) {
-            let distance = colorDistance(pixel.rgb, palette[j]);
+            let distance = calculateMSE(pixel.rgb, palette[j]);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 bestIndex = j;
@@ -183,6 +183,7 @@ fn expand565ToFloat(c: u32) -> vec3<f32> {
     let b = f32( c         & 31u) / 31.0;
     return vec3<f32>(r, g, b);
 }
+
 
 fn buildBc1Palette(c0_565: u32, c1_565: u32) -> array<vec3<f32>, 4> {
     let c0f = expand565ToFloat(c0_565);
