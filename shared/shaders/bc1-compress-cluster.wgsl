@@ -2,7 +2,9 @@ struct Uniforms {
     iterations: u32,
     useMSE: u32,
     useDither: u32,
+    useRefinement: u32,
 };
+
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var inputTexture: texture_2d<f32>;
@@ -243,24 +245,28 @@ fn compressBlockCluster(pixels: array<vec4<f32>,16>) -> array<u32,2> {
         }
     }
 
-    let cA = colorTo565(colorA);
-    let cB = colorTo565(colorB);
-   
-    var color0: u32 = cA;
-    var color1: u32 = cB;
-    var endA = colorA;
-    var endB = colorB;
+    // Convert to 565 format
+    var color0 = colorTo565(colorA);
+    var color1 = colorTo565(colorB);
 
+    // Order the colors properly
+    if (color0 <= color1) {
+        let temp = color0;
+        color0 = color1;
+        color1 = temp;
+    }
 
-    var lookupTable: u32 = 0u;
+    // Generate palette using the quantized colors
     var palette: array<vec3<f32>,4>;
-    let c0f = expand565ToFloat(cA);
-    let c1f = expand565ToFloat(cB);
+    let c0f = expand565ToFloat(color0);
+    let c1f = expand565ToFloat(color1);
     palette[0] = c0f;
     palette[1] = c1f;
-    palette[2] = mix(c0f, c1f, 1.0/3.0);
-    palette[3] = mix(c0f, c1f, 2.0/3.0);
+    palette[2] = mix(c0f, c1f, 0.3333);
+    palette[3] = mix(c0f, c1f, 0.6666);
 
+    // Build lookup table
+    var lookupTable: u32 = 0u;
     for (var i = 0u; i < 16u; i++) {
         let p = rgbPixels[i];
         var bestIndex = 0u;

@@ -2,7 +2,9 @@ struct Uniforms {
     iterations: u32,
     useMSE: u32,
     useDither: u32,
+    useRefinement: u32,
 };
+
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var inputTexture: texture_2d<f32>;
@@ -22,7 +24,7 @@ fn applyDithering(pixels: array<vec4<f32>, 16>) -> array<vec4<f32>, 16> {
     
     if (uniforms.useDither == 1u) {
         for (var i = 0u; i < 16u; i++) {
-            let p = getPixelComponents(pixels, i);  // Use getPixelComponents instead of direct access
+            let p = getPixelComponents(pixels, i);
             let offset = (vec3<f32>(rand(), rand(), rand()) - 0.5) * 0.01;
             ditheredPixels[i] = vec4<f32>(clamp(p.rgb + offset, vec3<f32>(0.0), vec3<f32>(1.0)), p.w);
         }
@@ -92,17 +94,13 @@ fn evaluateBlockError(pixels: array<vec4<f32>,16>, c0: vec3<f32>, c1: vec3<f32>)
     return error;
 }
 
-fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
-    // Apply dithering through the unified function
-    let ditheredPixels = applyDithering(pixels);
-
-    // Initial min/max selection
-    let pixel0 = getPixelComponents(ditheredPixels, 0u);
+fn findInitialEndpoints(pixels: array<vec4<f32>, 16>) -> array<vec3<f32>, 2> {
+    let pixel0 = getPixelComponents(pixels, 0u);
     var minColor = pixel0.rgb;
     var maxColor = minColor;
 
     for (var i = 1u; i < 16u; i++) {
-        let pixel = getPixelComponents(ditheredPixels, i);
+        let pixel = getPixelComponents(pixels, i);
         let rgb = pixel.rgb;
         let alpha = pixel.w;
 
@@ -117,9 +115,24 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         }
     }
 
+    return array<vec3<f32>, 2>(maxColor, minColor);
+}
+
+
+fn refineEndpointsBasic(
+    maxColor: vec3<f32>,
+    minColor: vec3<f32>,
+    pixels: array<vec4<f32>, 16>,
+    useRefinement: u32
+) -> array<vec3<f32>, 2> {
+    // If refinement is disabled, return original endpoints
+    if (useRefinement == 0u) {
+        return array<vec3<f32>, 2>(maxColor, minColor);
+    }
+
     var bestC0 = maxColor;
     var bestC1 = minColor;
-    var bestError = evaluateBlockError(ditheredPixels, bestC0, bestC1);
+    var bestError = evaluateBlockError(pixels, bestC0, bestC1);
 
     let steps = 2u;
     let stepSize = 0.02;
@@ -130,13 +143,15 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
                 for (var nx = 0u; nx <= steps; nx++) {
                     for (var ny = 0u; ny <= steps; ny++) {
                         for (var nz = 0u; nz <= steps; nz++) {
-                            let deltaMax = vec3<f32>(f32(mx)*stepSize, f32(my)*stepSize, f32(mz)*stepSize) - vec3<f32>(f32(steps), f32(steps), f32(steps))*stepSize*0.5;
-                            let deltaMin = vec3<f32>(f32(nx)*stepSize, f32(ny)*stepSize, f32(nz)*stepSize) - vec3<f32>(f32(steps), f32(steps), f32(steps))*stepSize*0.5;
+                            let deltaMax = vec3<f32>(f32(mx)*stepSize, f32(my)*stepSize, f32(mz)*stepSize) 
+                                         - vec3<f32>(f32(steps), f32(steps), f32(steps))*stepSize*0.5;
+                            let deltaMin = vec3<f32>(f32(nx)*stepSize, f32(ny)*stepSize, f32(nz)*stepSize) 
+                                         - vec3<f32>(f32(steps), f32(steps), f32(steps))*stepSize*0.5;
 
                             let testC0 = clamp(maxColor + deltaMax, vec3<f32>(0.0), vec3<f32>(1.0));
                             let testC1 = clamp(minColor + deltaMin, vec3<f32>(0.0), vec3<f32>(1.0));
 
-                            let err = evaluateBlockError(ditheredPixels, testC0, testC1);
+                            let err = evaluateBlockError(pixels, testC0, testC1);
                             if (err < bestError) {
                                 bestError = err;
                                 bestC0 = testC0;
@@ -149,8 +164,28 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         }
     }
 
+    return array<vec3<f32>, 2>(bestC0, bestC1);
+}
+
+fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
+    // Apply dithering through the unified function
+    let ditheredPixels = applyDithering(pixels);
+
+    // Find initial endpoints
+    let initialEndpoints = findInitialEndpoints(ditheredPixels);
+    let maxColor = initialEndpoints[0];
+    let minColor = initialEndpoints[1];
+
+    // Refine endpoints
+    let refinedEndpoints = refineEndpointsBasic(maxColor, minColor, ditheredPixels, uniforms.useRefinement);
+    let bestC0 = refinedEndpoints[0];
+    let bestC1 = refinedEndpoints[1];
+
+    // Convert to 565 format
     let color0 = colorTo565(bestC0);
     let color1 = colorTo565(bestC1);
+
+    // Build palette and create lookup table
     var palette = buildBc1Palette(color0, color1);
     var lookupTable: u32 = 0u;
 
@@ -158,8 +193,7 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         var bestIndex = 0u;
         var bestDistance = 1e9;
         let pixel = getPixelComponents(ditheredPixels, i);
-        let rgb = pixel.rgb;
-
+        
         for (var j = 0u; j < 4u; j++) {
             let distance = calculateMSE(pixel.rgb, palette[j]);
             if (distance < bestDistance) {
@@ -167,7 +201,6 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
                 bestIndex = j;
             }
         }
-
         lookupTable |= bestIndex << (i * 2u);
     }
 

@@ -237,7 +237,7 @@ async loadImage(path) {
 
             // Create uniform buffer
             const uniformBuffer = this.device.createBuffer({
-                size: 12, // 3 x u32
+                size: 16, // 4 x u32
                 usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
             });
 
@@ -245,7 +245,8 @@ async loadImage(path) {
             const uniformData = new Uint32Array([
                 method === 'random' ? iterations : 0,
                 0, // useMSE
-                0  // useDither
+                0,  // useDither
+                1, // refinement
             ]);
             this.device.queue.writeBuffer(uniformBuffer, 0, uniformData);
 

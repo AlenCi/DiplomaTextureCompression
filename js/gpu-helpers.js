@@ -22,14 +22,14 @@ export function createTexture(device, paddedWidth, paddedHeight, image) {
 }
 
 export function createUniformBuffer(device, method, iterations, useMSE, useDither) {
-    const bufferSize = 12; // Space for three u32 values
+    const bufferSize = 16; // Space for 4 x u32 values
     
     if (method === 'random') {
         const buffer = device.createBuffer({
             size: bufferSize,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
-        const data = new Uint32Array([iterations, useMSE ? 1 : 0, useDither ? 1 : 0]);
+        const data = new Uint32Array([iterations, useMSE ? 1 : 0, useDither ? 1 : 0],0);
         device.queue.writeBuffer(buffer, 0, data);
         return buffer;
     } else {
@@ -37,7 +37,7 @@ export function createUniformBuffer(device, method, iterations, useMSE, useDithe
             size: bufferSize,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
-        const data = new Uint32Array([0, useMSE ? 1 : 0, useDither ? 1 : 0]);
+        const data = new Uint32Array([0, useMSE ? 1 : 0, useDither ? 1 : 0,1]);
         device.queue.writeBuffer(buffer, 0, data);
         return buffer;
     }

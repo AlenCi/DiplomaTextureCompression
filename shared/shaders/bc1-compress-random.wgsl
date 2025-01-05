@@ -2,7 +2,9 @@ struct Uniforms {
     iterations: u32,
     useMSE: u32,
     useDither: u32,
+    useRefinement: u32,
 };
+
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var inputTexture: texture_2d<f32>;

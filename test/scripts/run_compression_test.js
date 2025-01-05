@@ -184,7 +184,6 @@ class CompressionTester {
             throw new Error(`Compressonator failed with code ${code}`);
         }
     
-        const ddsData = await DDSHandler.readDDS(outputPath);
         const ssim = await this.runSSIM(this.currentImagePath, outputPath);
 
         return {
@@ -262,9 +261,9 @@ class CompressionTester {
         }
 
         const configs = [
-            { method: 'pca', parameters: { dither: false, powerIter: 8 }},
-            { method: 'cluster', parameters: { dither: false, powerIter: 8 }},
-            { method: 'basic', parameters: { dither: false, powerIter: 8 }},
+            { method: 'pca', parameters: { dither: false}},
+            { method: 'cluster', parameters: { dither: false}},
+            { method: 'basic', parameters: { dither: false}},
         ];
 
         const compressonatorConfigs = [

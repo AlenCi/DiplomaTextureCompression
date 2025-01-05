@@ -1,10 +1,12 @@
 // shared/shaders/bc1-compress-pca.wgsl
 
 struct Uniforms {
-    iterations: u32, 
+    iterations: u32,
     useMSE: u32,
-    useDither: u32, 
+    useDither: u32,
+    useRefinement: u32,
 };
+
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var inputTexture: texture_2d<f32>;
@@ -291,6 +293,10 @@ fn refineEndpoints(
     origC1: u32,
     blockPixels: array<vec4<f32>, 16>
 ) -> array<u32, 2> {
+    if (uniforms.useRefinement == 0u) {
+        return array<u32, 2>(origC0, origC1);
+    }
+
     // Decode original 565 colors
     let o0r = (origC0 >> 11u) & 31u;
     let o0g = (origC0 >> 5u) & 63u;
