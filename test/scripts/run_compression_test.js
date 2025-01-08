@@ -4,8 +4,8 @@ import { ensureDir } from "https://deno.land/std/fs/mod.ts";
 import { CompressionCore } from "../../shared/compression-core.js";
 import { CompressionHandler } from "../../shared/compression-handler.js";
 import { DDSHandler } from "../../shared/dds-handler.js";
-import { DecompressionHandler } from "../../shared/decompression-handler.js";
-import { ImageQualityMetrics } from "../../shared/image-quality-metrics.js";
+// import { DecompressionHandler } from "../../shared/decompression-handler.js";
+// import { ImageQualityMetrics } from "../../shared/image-quality-metrics.js";
 
 const COMPRESSONATOR_PATH = "C:\\Compressonator_4.5.52\\bin\\CLI\\compressonatorcli.exe";
 const NVCOMPRESS_PATH = "C:\\Program Files\\NVIDIA Corporation\\NVIDIA Texture Tools\\nvcompress.exe";
@@ -48,39 +48,73 @@ class CompressionTester {
         }
     }
 
-    async runSSIM(originalPath, compressedPath) {
-        const cmd = [
+    async runImageMetrics(originalPath, compressedPath) {
+        // Run SSIM
+        const ssimCmd = [
             "pyiqa",
             "ssim",
             "-t", originalPath,
             "-r", compressedPath
         ];
 
-        const process = new Deno.Command(cmd[0], {
-            args: cmd.slice(1),
+        // Run PSNR
+        const psnrCmd = [
+            "pyiqa",
+            "psnr",
+            "-t", originalPath,
+            "-r", compressedPath
+        ];
+
+        const metrics = {
+            ssim: 0.0,
+            psnr: 0.0
+        };
+
+        // Run SSIM measurement
+        const ssimProcess = new Deno.Command(ssimCmd[0], {
+            args: ssimCmd.slice(1),
             stdout: "piped",
             stderr: "piped"
         });
 
-        const { code, stdout, stderr } = await process.output();
-
-        if (code !== 0) {
-            const err = new TextDecoder().decode(stderr);
-            console.error("pyiqa error:", err);
-            throw new Error(`pyiqa failed with code ${code}`);
+        const ssimResult = await ssimProcess.output();
+        if (ssimResult.code !== 0) {
+            const err = new TextDecoder().decode(ssimResult.stderr);
+            console.error("pyiqa SSIM error:", err);
+            throw new Error(`pyiqa SSIM failed with code ${ssimResult.code}`);
         }
 
-        const outputStr = new TextDecoder().decode(stdout);
-
-        let ssimValue = 0.0;
-        const match = outputStr.match(/ssim.*?\b(\d+(\.\d+)?)/i);
-        if (match) {
-            ssimValue = parseFloat(match[1]);
+        const ssimOutput = new TextDecoder().decode(ssimResult.stdout);
+        const ssimMatch = ssimOutput.match(/ssim.*?\b(\d+(\.\d+)?)/i);
+        if (ssimMatch) {
+            metrics.ssim = parseFloat(ssimMatch[1]);
         } else {
-            console.warn("Could not parse SSIM from pyiqa output:", outputStr);
+            console.warn("Could not parse SSIM from pyiqa output:", ssimOutput);
         }
 
-        return ssimValue;
+        // Run PSNR measurement
+        const psnrProcess = new Deno.Command(psnrCmd[0], {
+            args: psnrCmd.slice(1),
+            stdout: "piped",
+            stderr: "piped"
+        });
+
+        const psnrResult = await psnrProcess.output();
+        if (psnrResult.code !== 0) {
+            const err = new TextDecoder().decode(psnrResult.stderr);
+            console.error("pyiqa PSNR error:", err);
+            throw new Error(`pyiqa PSNR failed with code ${psnrResult.code}`);
+        }
+
+        const psnrOutput = new TextDecoder().decode(psnrResult.stdout);
+        const psnrMatch = psnrOutput.match(/psnr.*?\b(\d+(\.\d+)?)/i);
+        if (psnrMatch) {
+            metrics.psnr = parseFloat(psnrMatch[1]);
+        } else {
+            console.warn("Could not parse PSNR from pyiqa output:", psnrOutput);
+        }
+
+        return metrics;
     }
 
     async loadShaders() {
@@ -121,8 +155,7 @@ class CompressionTester {
 
             console.log("Got dds");
 
-            const ssim = await this.runSSIM(this.currentImagePath, outputDDS);
-
+            const metrics = await this.runImageMetrics(this.currentImagePath, outputDDS);
 
             return {
                 method: config.method,
@@ -130,7 +163,8 @@ class CompressionTester {
                 metrics: {
                     compressionTime: endTime - startTime,
                     compressedSize: result.compressedData.byteLength,
-                    ssim
+                    ssim: metrics.ssim,
+                    psnr: metrics.psnr
                 }
             };
         } catch (error) {
@@ -184,7 +218,7 @@ class CompressionTester {
             throw new Error(`Compressonator failed with code ${code}`);
         }
     
-        const ssim = await this.runSSIM(this.currentImagePath, outputPath);
+        const metrics = await this.runImageMetrics(this.currentImagePath, outputPath);
 
         return {
             method: "compressonator",
@@ -192,7 +226,8 @@ class CompressionTester {
             metrics: {
                 compressionTime: endTime - startTime,
                 compressedSize: (await Deno.stat(outputPath)).size,
-                ssim
+                ssim: metrics.ssim,
+                psnr: metrics.psnr
             }
         };
     }
@@ -239,7 +274,7 @@ class CompressionTester {
             throw new Error(`nvcompress failed with code ${code}`);
         }
 
-        const ssim = await this.runSSIM(this.currentImagePath, outputPath);
+        const metrics = await this.runImageMetrics(this.currentImagePath, outputPath);
 
         return {
             method: "nvcompress",
@@ -247,7 +282,8 @@ class CompressionTester {
             metrics: {
                 compressionTime: endTime - startTime,
                 compressedSize: (await Deno.stat(outputPath)).size,
-                ssim
+                ssim: metrics.ssim,
+                psnr: metrics.psnr
             }
         };
     }
@@ -346,19 +382,91 @@ async function main() {
         await tester.init();
         const results = await tester.runTestSuite();
         
-        // Print results summary
+        // Track totals for averaging
+        const methodAverages = new Map();
+        const methodCounts = new Map();
+        
+        // Process results and collect totals
         for (const imageResults of results) {
             console.log(`\nResults for ${imageResults.image}:`);
             for (const result of imageResults.results) {
+                const methodKey = JSON.stringify({
+                    method: result.method,
+                    parameters: result.parameters
+                });
+                
+                if (!methodAverages.has(methodKey)) {
+                    methodAverages.set(methodKey, {
+                        ssim: 0,
+                        psnr: 0,
+                        time: 0,
+                        size: 0
+                    });
+                    methodCounts.set(methodKey, 0);
+                }
+                
+                const averages = methodAverages.get(methodKey);
+                averages.ssim += result.metrics.ssim;
+                averages.psnr += result.metrics.psnr;
+                averages.time += result.metrics.compressionTime;
+                averages.size += result.metrics.compressedSize;
+                methodCounts.set(methodKey, methodCounts.get(methodKey) + 1);
+                
                 console.log(`\n${result.method}:`);
                 console.log("Parameters:", result.parameters);
                 console.log("Metrics:", {
                     SSIM: result.metrics.ssim.toFixed(4),
+                    PSNR: result.metrics.psnr.toFixed(4),
                     "Time (ms)": result.metrics.compressionTime.toFixed(0),
                     "Size (bytes)": result.metrics.compressedSize
                 });
             }
         }
+        
+        // Calculate averages and prepare for JSON
+        const averagesForJson = [];
+        for (const [methodKey, totals] of methodAverages) {
+            const count = methodCounts.get(methodKey);
+            const { method, parameters } = JSON.parse(methodKey);
+            
+            const averageMetrics = {
+                ssim: totals.ssim / count,
+                psnr: totals.psnr / count,
+                compressionTime: totals.time / count,
+                compressedSize: Math.round(totals.size / count)
+            };
+            
+            averagesForJson.push({
+                method,
+                parameters,
+                metrics: averageMetrics
+            });
+            
+            // Console output
+            console.log(`\n${method}:`);
+            console.log("Parameters:", parameters);
+            console.log("Average Metrics:", {
+                SSIM: averageMetrics.ssim.toFixed(4),
+                PSNR: averageMetrics.psnr.toFixed(4),
+                "Time (ms)": averageMetrics.compressionTime.toFixed(0),
+                "Size (bytes)": averageMetrics.compressedSize
+            });
+        }
+        
+        // Prepare final results object with both individual results and averages
+        const finalResults = {
+            timestamp: new Date().toISOString(),
+            individualResults: results,
+            averages: averagesForJson
+        };
+        
+        // Write to JSON file
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        await Deno.writeTextFile(
+            join(tester.metricsDir, `results_${timestamp}.json`),
+            JSON.stringify(finalResults, null, 2)
+        );
+
     } catch (error) {
         console.error("Test failed:", error);
         throw error;
