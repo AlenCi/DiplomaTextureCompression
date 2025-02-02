@@ -19,6 +19,116 @@ fn rand() -> f32 {
     return f32(result) / 4294967295.0;
 }
 
+fn srgbToLinear(c: f32) -> f32 {
+    return select(c / 12.92, pow((c + 0.055) / 1.055, 2.4), c > 0.04045);
+}
+
+fn rgbToXyz(rgb: vec3<f32>) -> vec3<f32> {
+    let r = srgbToLinear(rgb.x);
+    let g = srgbToLinear(rgb.y);
+    let b = srgbToLinear(rgb.z);
+
+    let X = r * 0.4124 + g * 0.3576 + b * 0.1805;
+    let Y = r * 0.2126 + g * 0.7152 + b * 0.0722;
+    let Z = r * 0.0193 + g * 0.1192 + b * 0.9505;
+
+    return vec3<f32>(X, Y, Z);
+}
+
+fn fLab(t: f32) -> f32 {
+    let delta = 6.0/29.0;
+    if (t > delta*delta*delta) {
+        return pow(t, 1.0/3.0);
+    } else {
+        return t/(3.0*delta*delta) + 4.0/29.0;
+    }
+}
+
+fn xyzToLab(xyz: vec3<f32>) -> vec3<f32> {
+    let Xn = 0.95047;
+    let Yn = 1.00000;
+    let Zn = 1.08883;
+
+    let fx = fLab(xyz.x/Xn);
+    let fy = fLab(xyz.y/Yn);
+    let fz = fLab(xyz.z/Zn);
+
+    let L = 116.0*fy - 16.0;
+    let a = 500.0*(fx - fy);
+    let b = 200.0*(fy - fz);
+    return vec3<f32>(L, a, b);
+}
+
+fn hueAngle(a: f32, b: f32) -> f32 {
+    let h = degrees(atan2(b, a));
+    return select(h, h+360.0, h < 0.0);
+}
+
+fn hueDifference(h1: f32, h2: f32, C1p: f32, C2p: f32) -> f32 {
+    if (C1p*C2p == 0.0) {
+        return 0.0;
+    }
+    let diff = abs(h1 - h2);
+    if (diff <= 180.0) {
+        return h2 - h1;
+    }
+    return select(h2 - h1 + 360.0, h2 - h1 - 360.0, h2 <= h1);
+}
+
+fn averageHue(h1: f32, h2: f32, C1p: f32, C2p: f32) -> f32 {
+    if (C1p*C2p == 0.0) {
+        return h1+h2;
+    }
+    let diff = abs(h1 - h2);
+    if (diff <= 180.0) {
+        return (h1+h2)*0.5;
+    }
+    return select((h1+h2+360.0)*0.5, (h1+h2-360.0)*0.5, h1+h2<360.0);
+}
+
+fn cieDeltaE2000(lab1: vec3<f32>, lab2: vec3<f32>) -> f32 {
+    let L1 = lab1.x; let a1 = lab1.y; let b1 = lab1.z;
+    let L2 = lab2.x; let a2 = lab2.y; let b2 = lab2.z;
+
+    let avgL = (L1 + L2) * 0.5;
+    let C1 = sqrt(a1*a1 + b1*b1);
+    let C2 = sqrt(a2*a2 + b2*b2);
+    let avgC = (C1 + C2)*0.5;
+
+    let G = 0.5 * (1.0 - sqrt((pow(avgC,7.0) / (pow(avgC,7.0) + pow(25.0,7.0)))));
+    let a1p = (1.0 + G)*a1;
+    let a2p = (1.0 + G)*a2;
+    let C1p = sqrt(a1p*a1p + b1*b1);
+    let C2p = sqrt(a2p*a2p + b2*b2);
+
+    let avgCp = (C1p + C2p)*0.5;
+
+    let h1p = hueAngle(a1p, b1);
+    let h2p = hueAngle(a2p, b2);
+    let dHp = hueDifference(h1p, h2p, C1p, C2p);
+    let avgHp = averageHue(h1p, h2p, C1p, C2p);
+
+    let T = 1.0 - 0.17*cos(radians(avgHp-30.0)) + 0.24*cos(radians(2.0*avgHp)) 
+            + 0.32*cos(radians(3.0*avgHp+6.0)) - 0.20*cos(radians(4.0*avgHp-63.0));
+    let deltaLp = L2 - L1;
+    let deltaCp = C2p - C1p;
+    let deltaHp = 2.0*sqrt(C1p*C2p)*sin(radians(dHp*0.5));
+
+    let Sl = 1.0 + (0.015*(avgL-50.0)*(avgL-50.0))/sqrt(20.0+(avgL-50.0)*(avgL-50.0));
+    let Sc = 1.0 + 0.045*avgCp;
+    let Sh = 1.0 + 0.015*avgCp*T;
+
+    let deltaTheta = 30.0*exp(-((avgHp-275.0)/25.0)*((avgHp-275.0)/25.0));
+    let Rc = 2.0*sqrt((pow(avgCp,7.0)/(pow(avgCp,7.0) + pow(25.0,7.0))));
+    let Rt = -Rc*sin(radians(2.0*deltaTheta));
+
+    let termL = deltaLp / (Sl);
+    let termC = deltaCp / (Sc);
+    let termH = deltaHp / (Sh);
+
+    return sqrt(termL*termL + termC*termC + termH*termH + Rt*termC*termH);
+}
+
 fn applyDithering(pixels: array<vec4<f32>, 16>) -> array<vec4<f32>, 16> {
     var ditheredPixels = pixels;
     
@@ -40,6 +150,16 @@ fn colorTo565(color: vec3<f32>) -> u32 {
 fn calculateMSE(original: vec3<f32>, compressed: vec3<f32>) -> f32 {
     let diff = original - compressed;
     return dot(diff, diff);
+}
+
+fn calculateError(c1: vec3<f32>, c2: vec3<f32>) -> f32 {
+    if (uniforms.useMSE == 1u) {
+        return calculateMSE(c1, c2);
+    } else {
+        let lab1 = xyzToLab(rgbToXyz(c1));
+        let lab2 = xyzToLab(rgbToXyz(c2));
+        return cieDeltaE2000(lab1, lab2);
+    }
 }
 
 fn getPixelComponents(pixels: array<vec4<f32>, 16>, index: u32) -> vec4<f32> {
@@ -84,7 +204,7 @@ fn evaluateBlockError(pixels: array<vec4<f32>,16>, c0: vec3<f32>, c1: vec3<f32>)
         var bestDist = 1e9;
         for (var j = 0u; j < 4u; j++) {
             let paletteColor = getColor(j, c0, c1);
-            let dist = calculateMSE(rgb, paletteColor);
+            let dist = calculateError(rgb, paletteColor);
             if (dist < bestDist) {
                 bestDist = dist;
             }
@@ -107,7 +227,6 @@ fn findInitialEndpoints(pixels: array<vec4<f32>, 16>) -> array<vec3<f32>, 2> {
         if (alpha < 0.5 || all(rgb == vec3<f32>(0.0))) {
             continue;
         }
-
         if (calculateMSE(rgb, minColor) > calculateMSE(maxColor, minColor)) {
             maxColor = rgb;
         } else if (calculateMSE(rgb, maxColor) > calculateMSE(minColor, maxColor)) {
@@ -195,7 +314,7 @@ fn compressBlock(pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
         let pixel = getPixelComponents(ditheredPixels, i);
         
         for (var j = 0u; j < 4u; j++) {
-            let distance = calculateMSE(pixel.rgb, palette[j]);
+            let distance = calculateError(pixel.rgb, palette[j]);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 bestIndex = j;

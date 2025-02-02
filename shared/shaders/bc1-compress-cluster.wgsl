@@ -10,6 +10,83 @@ struct Uniforms {
 @group(0) @binding(1) var inputTexture: texture_2d<f32>;
 @group(0) @binding(2) var<storage, read_write> outputBuffer: array<u32>;
 
+fn refineEndpoints(color0: u32, color1: u32, pixels: array<vec4<f32>, 16>) -> array<u32, 2> {
+    if (uniforms.useRefinement == 0u) {
+        return array<u32, 2>(color0, color1);
+    }
+
+    // Decode original 565 colors
+    let c0r = (color0 >> 11u) & 31u;
+    let c0g = (color0 >> 5u) & 63u;
+    let c0b = color0 & 31u;
+    
+    let c1r = (color1 >> 11u) & 31u;
+    let c1g = (color1 >> 5u) & 63u;
+    let c1b = color1 & 31u;
+
+    var bestC0 = color0;
+    var bestC1 = color1;
+    var bestError = evaluateBlock(pixels, expand565ToFloat(color0), expand565ToFloat(color1));
+
+    // Local refinement around current best colors
+    for (var dr0 = -1; dr0 <= 1; dr0++) {
+        for (var dg0 = -1; dg0 <= 1; dg0++) {
+            for (var db0 = -1; db0 <= 1; db0++) {
+                let r0 = clamp(i32(c0r) + dr0, 0, 31);
+                let g0 = clamp(i32(c0g) + dg0, 0, 63);
+                let b0 = clamp(i32(c0b) + db0, 0, 31);
+                let testC0 = (u32(r0) << 11u) | (u32(g0) << 5u) | u32(b0);
+
+                for (var dr1 = -1; dr1 <= 1; dr1++) {
+                    for (var dg1 = -1; dg1 <= 1; dg1++) {
+                        for (var db1 = -1; db1 <= 1; db1++) {
+                            let r1 = clamp(i32(c1r) + dr1, 0, 31);
+                            let g1 = clamp(i32(c1g) + dg1, 0, 63);
+                            let b1 = clamp(i32(c1b) + db1, 0, 31);
+                            let testC1 = (u32(r1) << 11u) | (u32(g1) << 5u) | u32(b1);
+
+                            let testError = evaluateBlock(
+                                pixels,
+                                expand565ToFloat(testC0),
+                                expand565ToFloat(testC1)
+                            );
+
+                            if (testError < bestError) {
+                                bestError = testError;
+                                bestC0 = testC0;
+                                bestC1 = testC1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return array<u32, 2>(bestC0, bestC1);
+}
+
+fn evaluateBlock(pixels: array<vec4<f32>, 16>, c0: vec3<f32>, c1: vec3<f32>) -> f32 {
+    let c2 = mix(c0, c1, 1.0/3.0);
+    let c3 = mix(c0, c1, 2.0/3.0);
+    var totalError = 0.0;
+    
+    for (var i = 0u; i < 16u; i++) {
+        var bestError = 1000000.0;
+        let pixel = getPixelComponents(pixels, i);
+        let rgb = pixel.rgb;
+        
+        bestError = min(bestError, calculateError(rgb, c0));
+        bestError = min(bestError, calculateError(rgb, c1));
+        bestError = min(bestError, calculateError(rgb, c2));
+        bestError = min(bestError, calculateError(rgb, c3));
+        
+        totalError += bestError;
+    }
+    
+    return totalError;
+}
+
 fn calculateMSE(original: vec3<f32>, compressed: vec3<f32>) -> f32 {
     let diff = original - compressed;
     return dot(diff, diff);
@@ -208,6 +285,7 @@ fn compressBlockCluster(pixels: array<vec4<f32>,16>) -> array<u32,2> {
     var colorA = validMin;
     var colorB = validMax;
 
+    // K-means clustering
     let iterations = 10u;
     for (var iter = 0u; iter < iterations; iter++) {
         var clusterA: array<vec3<f32>,16>;
@@ -245,44 +323,57 @@ fn compressBlockCluster(pixels: array<vec4<f32>,16>) -> array<u32,2> {
         }
     }
 
-    // Convert to 565 format
-    var color0 = colorTo565(colorA);
-    var color1 = colorTo565(colorB);
+    // Convert initial cluster centers to 565 format
+    var bestColor0 = colorTo565(colorA);
+    var bestColor1 = colorTo565(colorB);
 
     // Order the colors properly
-    if (color0 <= color1) {
-        let temp = color0;
-        color0 = color1;
-        color1 = temp;
+    if (bestColor0 <= bestColor1) {
+        let temp = bestColor0;
+        bestColor0 = bestColor1;
+        bestColor1 = temp;
     }
 
-    // Generate palette using the quantized colors
-    var palette: array<vec3<f32>,4>;
-    let c0f = expand565ToFloat(color0);
-    let c1f = expand565ToFloat(color1);
-    palette[0] = c0f;
-    palette[1] = c1f;
-    palette[2] = mix(c0f, c1f, 0.3333);
-    palette[3] = mix(c0f, c1f, 0.6666);
 
-    // Build lookup table
+    // Refinement phase
+    let refinedColors = refineEndpoints(bestColor0, bestColor1, ditheredPixels);
+    bestColor0 = refinedColors[0];
+    bestColor1 = refinedColors[1];
+
+    // Build lookup table with final colors
     var lookupTable: u32 = 0u;
+    let c0 = expand565ToFloat(bestColor0);
+    let c1 = expand565ToFloat(bestColor1);
+    let c2 = mix(c0, c1, 1.0/3.0);
+    let c3 = mix(c0, c1, 2.0/3.0);
+
     for (var i = 0u; i < 16u; i++) {
-        let p = rgbPixels[i];
         var bestIndex = 0u;
-        var bestDistance = 1e9;
+        var bestDistance = 1000000.0;
+        let pixel = getPixelComponents(ditheredPixels, i);
+        let rgb = pixel.rgb;
+        
         for (var j = 0u; j < 4u; j++) {
-            let d = calculateError(p, palette[j]);
-            if (d < bestDistance) {
-                bestDistance = d;
+            var paletteColor: vec3<f32>;
+            switch(j) {
+                case 0u: { paletteColor = c0; }
+                case 1u: { paletteColor = c1; }
+                case 2u: { paletteColor = c2; }
+                case 3u: { paletteColor = c3; }
+                default: { paletteColor = c0; }
+            }
+            let distance = calculateError(rgb, paletteColor);
+            if (distance < bestDistance) {
+                bestDistance = distance;
                 bestIndex = j;
             }
         }
-        lookupTable |= bestIndex << (i*2u);
+        
+        lookupTable |= bestIndex << (i * 2u);
     }
 
-    return array<u32,2>(
-        color0 | (color1 << 16u),
+    return array<u32, 2>(
+        bestColor0 | (bestColor1 << 16u),
         lookupTable
     );
 }

@@ -10,11 +10,85 @@ import { DDSHandler } from "../../shared/dds-handler.js";
 const COMPRESSONATOR_PATH = "C:\\Compressonator_4.5.52\\bin\\CLI\\compressonatorcli.exe";
 const NVCOMPRESS_PATH = "C:\\Program Files\\NVIDIA Corporation\\NVIDIA Texture Tools\\nvcompress.exe";
 
+const SHADER_PRESETS = {
+    pca: {
+        quality: {
+            useMSE: 0,      // Use perceptual metric
+            useDither: 1,   // Enable dithering
+            useRefinement: 1 // Use refinement
+        },
+        speed: {
+            useMSE: 1,      // Use MSE
+            useDither: 0,   // No dithering
+            useRefinement: 0 // No refinement
+        },
+        balanced: {
+            useMSE: 1,      // Use MSE
+            useDither: 1,   // Enable dithering
+            useRefinement: 0 // No refinement
+        }
+    },
+    cluster: {
+        quality: {
+            useMSE: 0,
+            useDither: 1,
+            useRefinement: 1
+        },
+        speed: {
+            useMSE: 1,
+            useDither: 0,
+            useRefinement: 0
+        },
+        balanced: {
+            useMSE: 1,
+            useDither: 1,
+            useRefinement: 0
+        }
+    },
+    random: {
+        quality: {
+            iterations: 2000,
+            useMSE: 0,
+            useDither: 1,
+            useRefinement: 1
+        },
+        speed: {
+            iterations: 500,
+            useMSE: 1,
+            useDither: 0,
+            useRefinement: 0
+        },
+        balanced: {
+            iterations: 1000,
+            useMSE: 1,
+            useDither: 1,
+            useRefinement: 0
+        }
+    },
+    basic: {
+        quality: {
+            useMSE: 0,
+            useDither: 1,
+            useRefinement: 1
+        },
+        speed: {
+            useMSE: 1,
+            useDither: 0,
+            useRefinement: 0
+        },
+        balanced: {
+            useMSE: 1,
+            useDither: 1,
+            useRefinement: 0
+        }
+    }
+};
+
 class CompressionTester {
     constructor() {
         this.testDir = dirname(fromFileUrl(import.meta.url));
-        this.imagesDir = join(this.testDir, '..', 'images');
-        this.resultsDir = join(this.testDir, '..', 'results');
+        this.imagesDir = join(this.testDir, '..', 'images2');
+        this.resultsDir = join(this.testDir, '..', 'res2');
         this.compressedDir = join(this.resultsDir, 'compressed');
         this.metricsDir = join(this.resultsDir, 'metrics');
         this.device = null;
@@ -297,10 +371,27 @@ class CompressionTester {
         }
 
         const configs = [
-            { method: 'pca', parameters: { dither: false}},
-            { method: 'cluster', parameters: { dither: false}},
-            { method: 'basic', parameters: { dither: false}},
+            // PCA configurations
+            // { method: 'pca', parameters: SHADER_PRESETS.pca.quality },
+            // { method: 'pca', parameters: SHADER_PRESETS.pca.speed },
+            // { method: 'pca', parameters: SHADER_PRESETS.pca.balanced },
+            
+            // // Cluster configurations
+            // { method: 'cluster', parameters: SHADER_PRESETS.cluster.quality },
+            // { method: 'cluster', parameters: SHADER_PRESETS.cluster.speed },
+            // { method: 'cluster', parameters: SHADER_PRESETS.cluster.balanced },
+            
+            // Random configurations
+            { method: 'random', parameters: SHADER_PRESETS.random.quality },
+            // { method: 'random', parameters: SHADER_PRESETS.random.speed },
+            // { method: 'random', parameters: SHADER_PRESETS.random.balanced },
+            
+            // // Basic configurations
+            // { method: 'basic', parameters: SHADER_PRESETS.basic.quality },
+            // { method: 'basic', parameters: SHADER_PRESETS.basic.speed },
+            // { method: 'basic', parameters: SHADER_PRESETS.basic.balanced }
         ];
+
 
         const compressonatorConfigs = [
             { useGPU: false },

@@ -197,11 +197,11 @@ async loadImage(path) {
         }
     }
 
-    async compressImage(pathOrData, method, iterations = 1000) {
+    async compressImage(pathOrData, method, parameters = {}) {
         try {
             console.log("\n=== Starting Image Compression ===");
             console.log("Compression method:", method);
-            console.log("Iterations:", iterations);
+            console.log("parameters:", parameters);
 
             // Load or use provided image data
             let width, height, data;
@@ -241,13 +241,15 @@ async loadImage(path) {
                 usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
             });
 
-            // Set uniform data based on method
-            const uniformData = new Uint32Array([
-                method === 'random' ? iterations : 0,
-                0, // useMSE
-                0,  // useDither
-                1, // refinement
-            ]);
+            console.log(method)
+
+
+        const uniformData = new Uint32Array([
+            parameters.iterations || 0, 
+            parameters.useMSE || 0,
+            parameters.useDither || 0,
+            parameters.useRefinement || 0
+        ]);
             this.device.queue.writeBuffer(uniformBuffer, 0, uniformData);
 
             // Create output buffer
