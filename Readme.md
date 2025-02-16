@@ -57,7 +57,7 @@ Odprite terminal v imeniku, kjer se nahaja cli/main.js.
 Za kompresijo slike uporabite naslednji ukaz:
 
 ```bash
-deno run --unstable --allow-read --allow-write cli/main.js compress vhodna_slika.png izhodna_slika.dds [metoda] [število_iteracij]
+deno run --unstable --allow-read --allow-write cli/main.js compress vhodna_slika.png izhodna_slika.dds [metoda] [opcije]
 ```
 
 - vhodna_slika.png: pot do vhodne slike (format PNG ali JPEG).
@@ -67,7 +67,11 @@ deno run --unstable --allow-read --allow-write cli/main.js compress vhodna_slika
   - `basic`  
   - `random`  
   - `cluster`
-- število_iteracij: (neobvezno) število iteracij, pomembno pri random metodi (privzeto: 10).
+- Opcije
+  - `iterations=<število>`: Število iteracij za random metodo (privzeto: 1000)
+  - `use-mse`: Uporaba MSE za primerjavo barv
+  - `use-dither`: Vklop dithering-a
+  - `use-refinement`: Vklop izboljševanja končnih točk
 
 #### Primer
 

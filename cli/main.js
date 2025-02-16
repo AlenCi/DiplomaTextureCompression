@@ -34,15 +34,43 @@ async function loadShaders() {
 function printUsage() {
     console.log(`
 Usage:
-    Compression:   deno run --unstable --allow-read --allow-write cli/main.js compress <input-image> <output-dds> [method] [iterations]
+    Compression:   deno run --unstable --allow-read --allow-write cli/main.js compress <input-image> <output-dds> [method] [options]
     Decompression: deno run --unstable --allow-read --allow-write cli/main.js decompress <input-dds> <output-image>
 
 Methods: pca (default), basic, random, cluster
-Iterations (for random method): number (default: 1000)
+
+Options:
+    --iterations=<number>    Number of iterations for random method (default: 1000)
+    --use-mse               Use Mean Squared Error for color comparison
+    --use-dither           Apply dithering during compression
+    --use-refinement       Enable endpoint refinement
     `);
 }
 
-// cli/main.js modification
+function parseOptions(args) {
+    const options = {
+        iterations: 1000,
+        useMSE: 0,
+        useDither: 0,
+        useRefinement: 0
+    };
+
+    for (let i = 4; i < args.length; i++) {
+        const arg = args[i];
+        if (arg.startsWith('--iterations=')) {
+            options.iterations = parseInt(arg.split('=')[1]);
+        } else if (arg === '--use-mse') {
+            options.useMSE = 1;
+        } else if (arg === '--use-dither') {
+            options.useDither = 1;
+        } else if (arg === '--use-refinement') {
+            options.useRefinement = 1;
+        }
+    }
+
+    return options;
+}
+
 async function compress(inputPath, outputPath, method = 'pca', parameters = {}) {
     try {
         console.log(`Compressing ${inputPath} to ${outputPath} using ${method} method with parameters:`, parameters);
@@ -83,11 +111,9 @@ async function decompress(inputPath, outputPath) {
     try {
         console.log(`Decompressing ${inputPath} to ${outputPath}...`);
         
-        // Read DDS file
         const ddsData = await DDSHandler.readDDS(inputPath);
         console.log(`Loaded DDS file: ${ddsData.width}x${ddsData.height}`);
 
-        // Decompress to RGBA
         console.log('Decompressing data...');
         const pixels = DecompressionHandler.decompress(
             ddsData.compressedData,
@@ -95,7 +121,6 @@ async function decompress(inputPath, outputPath) {
             ddsData.height
         );
 
-        // Save as PNG
         console.log('Saving decompressed image...');
         await DecompressionHandler.saveImage(
             pixels,
@@ -127,13 +152,12 @@ async function main() {
         switch (command) {
             case 'compress': {
                 const method = args[3] || 'pca';
-                const iterations = args[4] ? parseInt(args[4]) : 1000;
-                
-                if (!['pca', 'basic', 'random','cluster'].includes(method)) {
+                if (!['pca', 'basic', 'random', 'cluster'].includes(method)) {
                     throw new Error(`Invalid method: ${method}`);
                 }
                 
-                await compress(inputPath, outputPath, method, iterations);
+                const parameters = parseOptions(args);
+                await compress(inputPath, outputPath, method, parameters);
                 break;
             }
             case 'decompress': {
