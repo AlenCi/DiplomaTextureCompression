@@ -63,7 +63,7 @@ const SHADER_PRESETS = {
         quality: {
             useMSE: 0,      
             useDither: 0,   
-            useRefinement: 1 
+            useRefinement: 0 
         },
         speed: {
             useMSE: 1,      
@@ -80,7 +80,7 @@ const SHADER_PRESETS = {
         quality: {
             useMSE: 0,
             useDither: 0,
-            useRefinement: 1
+            useRefinement: 0
         },
         speed: {
             useMSE: 1,
@@ -117,7 +117,7 @@ const SHADER_PRESETS = {
         quality: {
             useMSE: 0,
             useDither: 0,
-            useRefinement: 1
+            useRefinement: 0,
         },
         speed: {
             useMSE: 1,
