@@ -227,11 +227,15 @@ fn averageHue(h1: f32, h2: f32, C1p: f32, C2p: f32) -> f32 {
 
 fn calculateError(c1: vec3<f32>, c2: vec3<f32>) -> f32 {
     if (uniforms.useMSE == 1u) {
-        return calculateMSE(c1, c2);
+        let diff = c1 - c2;
+        return dot(diff, diff); // MSE in RGB space
     } else {
         let lab1 = xyzToLab(rgbToXyz(c1));
         let lab2 = xyzToLab(rgbToXyz(c2));
-        return cieDeltaE2000(lab1, lab2);
+        let deltaL = lab2.x - lab1.x;
+        let deltaA = lab2.y - lab1.y;
+        let deltaB = lab2.z - lab1.z;
+        return sqrt(deltaL * deltaL + deltaA * deltaA + deltaB * deltaB); // CIELAB ΔE*ab
     }
 }
 

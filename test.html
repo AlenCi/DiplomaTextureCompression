@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>BC1 Decode Test</title>
+</head>
+<body>
+    <canvas id="glCanvas" width="4" height="4"></canvas>
+    <script>
+        // Create a DDS file header and data
+        function createDDSWithTestBlock() {
+            const header = new Uint8Array(128);
+            const view = new DataView(header.buffer);
+            
+            // DDS header (unchanged)
+            view.setUint32(0, 0x20534444, true);
+            view.setUint32(4, 124, true);
+            view.setUint32(8, 0x1 | 0x2 | 0x4 | 0x1000 | 0x80000, true);
+            view.setUint32(12, 4, true);
+            view.setUint32(16, 4, true);
+            view.setUint32(20, 8, true);
+            view.setUint32(76, 32, true);
+            view.setUint32(80, 0x4, true);
+            view.setUint32(84, 0x31545844, true);
+            
+            // New test colors
+            const color0_565 = (0 << 11) | (62 << 5) | 0; // (0, 248, 0) -> (0, 62, 0)
+            const color1_565 = 0;                         // (0, 0, 0) -> (0, 0, 0)
+            
+            const blockData = new Uint8Array(8);
+            const blockView = new DataView(blockData.buffer);
+            
+            blockView.setUint16(0, color0_565, true);
+            blockView.setUint16(2, color1_565, true);
+            
+            // Indices to sample all four colors: 00, 01, 10, 11 repeating
+            blockView.setUint32(4, 0xe4e4e4e4, true); // 11 10 01 00 pattern
+            
+            const ddsFile = new Uint8Array(128 + 8);
+            ddsFile.set(header);
+            ddsFile.set(blockData, 128);
+            
+            return ddsFile;
+        }
+
+        // Create and compile shader
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                throw new Error(gl.getShaderInfoLog(shader));
+            }
+            return shader;
+        }
+
+        // Initialize WebGL and run test
+        async function runTest() {
+            const canvas = document.getElementById('glCanvas');
+            const gl = canvas.getContext('webgl');
+            
+            if (!gl) {
+                throw new Error('WebGL not supported');
+            }
+
+            const ext = gl.getExtension('WEBGL_compressed_texture_s3tc');
+            if (!ext) {
+                throw new Error('WEBGL_compressed_texture_s3tc not supported');
+            }
+
+            // Create vertex shader
+            const vsSource = `
+                attribute vec2 position;
+                varying vec2 texCoord;
+                void main() {
+                    texCoord = position * 0.5 + 0.5;
+                    gl_Position = vec4(position, 0.0, 1.0);
+                }`;
+
+            // Create fragment shader
+            const fsSource = `
+                precision mediump float;
+                varying vec2 texCoord;
+                uniform sampler2D tex;
+                void main() {
+                    gl_FragColor = texture2D(tex, texCoord);
+                }`;
+
+            // Create shader program
+            const vertexShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
+            const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+            const program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                throw new Error(gl.getProgramInfoLog(program));
+            }
+
+            // Create quad vertices
+            const vertices = new Float32Array([
+                -1, -1,
+                1, -1,
+                -1, 1,
+                1, 1
+            ]);
+
+            const vertexBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+            // Create compressed texture
+            const compressedTexture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, compressedTexture);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+            const ddsData = createDDSWithTestBlock();
+            gl.compressedTexImage2D(
+                gl.TEXTURE_2D,
+                0,
+                ext.COMPRESSED_RGB_S3TC_DXT1_EXT,
+                4, 4, 0,
+                ddsData.slice(128)
+            );
+
+            // Create framebuffer and render target texture
+            const renderTexture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, renderTexture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 4, 4, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+            const fb = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, renderTexture, 0);
+
+            // Check framebuffer status
+            const fbStatus = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+            if (fbStatus !== gl.FRAMEBUFFER_COMPLETE) {
+                throw new Error(`Framebuffer not complete: 0x${fbStatus.toString(16)}`);
+            }
+
+            // Render compressed texture to framebuffer
+            gl.viewport(0, 0, 4, 4);
+            gl.useProgram(program);
+            
+            const positionLocation = gl.getAttribLocation(program, 'position');
+            gl.enableVertexAttribArray(positionLocation);
+            gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+            gl.bindTexture(gl.TEXTURE_2D, compressedTexture);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+            // Read pixels
+            const pixels = new Uint8Array(4 * 4 * 4);
+            gl.readPixels(0, 0, 4, 4, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+            // Log results
+            console.log("Decoded colors:");
+            for (let y = 0; y < 4; y++) {
+                for (let x = 0; x < 4; x++) {
+                    const offset = (y * 4 + x) * 4;
+                    console.log(`Pixel (${x},${y}): RGB = ${pixels[offset]},${pixels[offset+1]},${pixels[offset+2]}`);
+                }
+            }
+
+            // Clean up
+            gl.deleteFramebuffer(fb);
+            gl.deleteTexture(compressedTexture);
+            gl.deleteTexture(renderTexture);
+            gl.deleteBuffer(vertexBuffer);
+            gl.deleteProgram(program);
+            gl.deleteShader(vertexShader);
+            gl.deleteShader(fragmentShader);
+        }
+
+        // Run the test
+        runTest().catch(error => {
+            console.error('Test failed:', error);
+        });
+    </script>
+</body>
+</html>
