@@ -44,6 +44,9 @@ fn refineEndpoints(color0: u32, color1: u32, pixels: array<vec4<f32>, 16>) -> ar
                             let g1 = clamp(i32(c1g) + dg1, 0, 63);
                             let b1 = clamp(i32(c1b) + db1, 0, 31);
                             let testC1 = (u32(r1) << 11u) | (u32(g1) << 5u) | u32(b1);
+                            if (testC0 <= testC1) {
+                                continue;
+                            }
 
                             let testError = evaluateBlock(
                                 pixels,
