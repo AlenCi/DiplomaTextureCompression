@@ -4,10 +4,10 @@
 
 Cilj diplomskega dela je prikazati, kako deluje kompresija tekstur s pomočjo formata BC1 (znanega tudi kot DXT1). Format BC1 omogoča učinkovito kompresijo slikovnega materiala, pogosto uporabljenega v igrah in 3D grafiki, ter tako zmanjša porabo pomnilnika in pospeši prikazovanje. Diplomska naloga zajema tako konceptualni pregled algoritmov kot tudi praktično implementacijo v obliki dveh komponent:
 
-1. **Spletna aplikacija (HTML/CSS/JS):**  
+1. **Spletna aplikacija (WebGPU):**  
    V spletni aplikaciji lahko uporabnik naloži sliko, izvede kompresijo z različnimi metodami (PCA, Basic, Random, Cluster) ter si ogleda rezultate in osnovne statistike o kakovosti (MSE, PSNR, SSIM itd.).
 
-2. **Ukazno-vrstični program (CMD, Deno + WebGPU):**  
+2. **Ukazno-vrstični program (Deno + WebGPU):**  
    Ta program teče v okolju Deno in omogoča kompresijo ter dekompresijo DDS datotek preko ukazne vrstice. Vsebuje podporo za načine PCA, Basic, Random in Cluster, kakor tudi možnost nastavitve števila iteracij pri "random" metodi za natančnejše rezultate.
 
 Tako spletna kot tudi CMD aplikacija ponujata različne pristope k BC1 kompresiji, kar omogoča primerjavo med enostavnimi (Basic), naprednimi (PCA, Cluster) in stohastičnimi (Random) metodami za doseganje najboljše kakovosti slike in učinkovitosti.
