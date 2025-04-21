@@ -5,10 +5,10 @@
 Projekt predstavlja implementacijo za diplomsko delo **Vzporedna kompresija tekstur v formatu BC1 z vmesnikom WebGPU**.
 
 1. **Spletna aplikacija (WebGPU):**  
-   V spletni aplikaciji lahko uporabnik naloži sliko, izvede kompresijo z različnimi metodami (PCA, Basic, Random, Cluster) ter si ogleda rezultate in osnovne statistike o kakovosti (MSE, PSNR, SSIM itd.).
+   V spletni aplikaciji lahko uporabnik naloži sliko in izvede kompresijo ter dekompresijo z različnimi metodami (PCA, Basic, Random, Cluster).
 
 2. **Ukazno-vrstični program (Deno + WebGPU):**  
-   Ta program teče v okolju Deno in omogoča kompresijo ter dekompresijo DDS datotek preko ukazne vrstice. Vsebuje podporo za načine PCA, Basic, Random in Cluster, kakor tudi možnost nastavitve števila iteracij pri "random" metodi za natančnejše rezultate.
+   Ta program teče v okolju Deno in omogoča kompresijo ter dekompresijo preko ukazne vrstice. Vsebuje podporo za isti nabor metod kakor spletna aplikacija.
 
 ---
 
