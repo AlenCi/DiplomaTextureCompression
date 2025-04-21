@@ -8,6 +8,9 @@
     <link href="css/styles.css" rel="stylesheet">
 </head>
 <body>
+    <div id="webgpu-warning" class="alert alert-danger" style="display: none;">
+        <strong>Warning:</strong> WebGPU is not supported in your browser. This demo requires WebGPU to function properly. Try using Chrome
+    </div>
     <div class="container mt-5">
         <h1 class="mb-4">BC1 Texture Compression Demo</h1>
         
@@ -40,6 +43,10 @@
         <button id="compress-btn" class="btn btn-primary mb-4">Compress All</button>
         
         <div class="row">
+            <div id="dds-section" class="col-12 mb-4" style="display: none;">
+                <h2>Decompressed DDS</h2>
+                <canvas id="dds-decompressed" class="img-fluid"></canvas>
+            </div>
             <div class="col-12 mb-4">
                 <h2>Original</h2>
                 <canvas id="original-canvas" class="img-fluid"></canvas>

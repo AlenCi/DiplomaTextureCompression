@@ -1,4 +1,3 @@
-// main.js
 import { GPUSetup } from './gpu-setup.js';
 import { displayOriginalImage, clearResults } from './visualization.js';
 import { FileHandler } from './file-handler.js';
@@ -7,6 +6,14 @@ import { displayCompressionResults } from './stats-display.js';
 import { DDSHandler } from '../shared/dds-handler.js';
 import { decompressAndVisualize } from './visualization.js';
 let gpuSetup, originalImage;
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Check for WebGPU support
+    if (!navigator.gpu) {
+        const warningDiv = document.getElementById('webgpu-warning');
+        warningDiv.style.display = 'block';
+    }
+});
 
 async function init() {
     gpuSetup = new GPUSetup();
@@ -28,8 +35,6 @@ async function init() {
         });
     });
     document.getElementById('dds-upload').addEventListener('change', handleDDSUpload);
-
-    
 }
 
 async function handleDDSUpload(event) {
@@ -40,21 +45,12 @@ async function handleDDSUpload(event) {
         console.log("Loading DDS file...");
         const ddsData = await DDSHandler.loadDDS(file);
         
-        // Create a new section for the decompressed image
-        const container = document.createElement('div');
-        container.className = 'compression-method';
+        // Use the static canvas element
+        const canvas = document.getElementById('dds-decompressed');
         
-        const title = document.createElement('h3');
-        title.textContent = 'Decompressed DDS';
-        container.appendChild(title);
-
-        const canvas = document.createElement('canvas');
-        canvas.id = 'dds-decompressed';
-        container.appendChild(canvas);
-
-        // Add it to the page
-        document.getElementById('compression-container').appendChild(container);
-
+        // Show the DDS section
+        document.getElementById('dds-section').style.display = 'block';
+        
         // Decompress and display
         decompressAndVisualize(
             ddsData.compressedData,
@@ -72,13 +68,12 @@ async function handleDDSUpload(event) {
     }
 }
 
-
 async function compressAllMethods() {
     if (!originalImage) return;
 
     clearResults();
 
-    const methods = ['pca', 'basic', 'random','cluster'];
+    const methods = ['pca', 'basic', 'random', 'cluster'];
     const iterations = parseInt(document.getElementById('iterations').value);
 
     displayOriginalImage(originalImage);
@@ -121,11 +116,8 @@ async function compressImageWebGPU(method, iterations) {
         compressedSize
     );
 
-    
-
     displayCompressionResults(method, originalImage, compressedData, dimensions, compressedSize);
     gpuReadBuffer.unmap();
 }
-
 
 init();

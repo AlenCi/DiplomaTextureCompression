@@ -41,7 +41,13 @@ export function decompressAndVisualize(compressedData, width, height, paddedWidt
 }
 
 export function clearResults() {
-    const canvases = document.querySelectorAll('canvas');
+    const canvases = [
+        document.getElementById('original-canvas'),
+        document.getElementById('pca-canvas'),
+        document.getElementById('basic-canvas'),
+        document.getElementById('random-canvas'),
+        document.getElementById('cluster-canvas')
+    ];
     canvases.forEach(canvas => {
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
