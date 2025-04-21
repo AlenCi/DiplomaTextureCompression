@@ -3,7 +3,4 @@
 /test.dds
 /input.jpg
 /.vscode
-/test/compressors
-/test/images
-/test/results
-
+/test
