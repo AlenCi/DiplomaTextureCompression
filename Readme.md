@@ -18,9 +18,13 @@ Tako spletna kot tudi CMD aplikacija ponujata različne pristope k BC1 kompresij
 
 ### Spletna aplikacija
 
-#### Zagon spletne aplikacije
+#### Dostop do spletne aplikacije
 
-1. Odprite datoteko `index.html` v sodobnem brskalniku, ki podpira **WebGPU** (trenutno Chrome ali ustrezen brskalnik z vključenimi eksperimentalnimi funkcijami).
+- Odprite povezavo [Diploma Texture Compression](https://alenci.github.io/DiplomaTextureCompression/) v sodobnem brskalniku, ki podpira **WebGPU** (trenutno Chrome ali ustrezen brskalnik z vključenimi eksperimentalnimi funkcijami).
+
+#### Zagon spletne aplikacije lokalno
+
+- Po prenosu projekta odprite datoteko `index.html` v sodobnem brskalniku, ki podpira **WebGPU** (trenutno Chrome ali ustrezen brskalnik z vključenimi eksperimentalnimi funkcijami).
 
 #### Nalaganje vhodne slike
 
